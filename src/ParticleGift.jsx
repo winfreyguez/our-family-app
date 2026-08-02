@@ -17,7 +17,6 @@ export default function ParticleGift({ message = 'I Love You', color = '#00d2ff'
     window.addEventListener('resize', resize);
     resize();
 
-    // Heart math in 3D!
     class Point {
       constructor() {
         this.x = 0;
@@ -47,10 +46,8 @@ export default function ParticleGift({ message = 'I Love You', color = '#00d2ff'
       const cx = width / 2;
       const cy = height / 2;
 
-      // Rotate points slightly to simulate 3D
       particles.forEach(p => {
         p.update();
-        // Basic 3D projection
         const fov = 300;
         const scale2d = fov / (fov + p.z);
         const x2d = cx + p.x * scale2d;
@@ -64,13 +61,12 @@ export default function ParticleGift({ message = 'I Love You', color = '#00d2ff'
         ctx.fill();
       });
 
-      // Draw the text
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 40px "Inter", sans-serif';
       ctx.textAlign = 'center';
       ctx.shadowColor = color;
-      ctx.shadowBlur = 20;
-      ctx.fillText(message, width/2, 60);
+      ctx.shadowBlur = 30;
+      ctx.fillText(message, width/2, 70);
       ctx.shadowBlur = 0;
       
       animationId = requestAnimationFrame(draw);
@@ -86,7 +82,7 @@ export default function ParticleGift({ message = 'I Love You', color = '#00d2ff'
   return (
     <div style={{position:'fixed', top:0, left:0, width:'100vw', height:'100vh', background:'rgba(0,0,0,0.85)', zIndex:9999, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center'}}>
       <canvas ref={canvasRef} style={{width:'100%', height:'100%', display:'block'}} />
-      <button onClick={onClose} style={{position:'absolute', bottom:'40px', background:'rgba(255,255,255,0.2)', color:'white', border:'1px solid white', padding:'10px 20px', borderRadius:'2rem', cursor:'pointer', fontWeight:'bold', fontSize:'1rem'}}>Close Gift</button>
+      <button onClick={onClose} style={{position:'absolute', bottom:'40px', background:'rgba(255,255,255,0.2)', color:'white', border:'1px solid white', padding:'10px 20px', borderRadius:'2rem', cursor:'pointer', fontWeight:'bold', fontSize:'1rem', transition:'0.2s'}} onMouseOver={(e) => e.target.style.background='rgba(255,255,255,0.4)'} onMouseOut={(e) => e.target.style.background='rgba(255,255,255,0.2)'}>Close Gift</button>
     </div>
   );
 }
