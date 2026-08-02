@@ -403,6 +403,7 @@ function App() {
   useEffect(() => { if (currentView === 'wallet') fetchTransactions() }, [currentView])
   useEffect(() => { if (currentView === 'savings') fetchSavings() }, [currentView])
 
+  // Chat & Realtime Subscription
   useEffect(() => {
     if (currentView === 'chat') {
       fetchChatMessages()
@@ -414,6 +415,7 @@ function App() {
       return () => supabase.removeChannel(channel)
     }
   }, [currentView])
+
   useEffect(() => {
     if (currentView === 'gifts') {
       const gChannel = supabase.channel('gifts')
