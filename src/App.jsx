@@ -68,7 +68,11 @@ function App() {
   const [signupPin, setSignupPin] = useState('')
   const [userProfile, setUserProfile] = useState(null)
 
-  // --- OTHER PROFILE (for Online/Offline) ---
+  // --- UNREAD BADGE COUNTS ---
+  const [unreadCounts, setUnreadCounts] = useState({
+    gallery: 0, timeline: 0, chat: 0, questions: 0, plans: 0, gifts: 0, savings: 0
+  })
+
   const [otherProfile, setOtherProfile] = useState(null)
 
   const [deferredPrompt, setDeferredPrompt] = useState(null)
@@ -76,6 +80,8 @@ function App() {
 
   const [historyStack, setHistoryStack] = useState(['home'])
   const navigateTo = (view) => {
+    // Mark read when navigating to a view
+    localStorage.setItem(`last_read_${view}`, new Date().toISOString())
     setHistoryStack(prev => [...prev, view])
     setCurrentView(view)
   }
@@ -131,7 +137,25 @@ function App() {
   const [withdrawReason, setWithdrawReason] = useState('')
 
   // Call State
-  const [callType, setCallType] = useState(null) // 'video', 'voice', or null
+  const [callType, setCallType] = useState(null)
+
+  // --- NATIVE POPUP NOTIFICATIONS ---
+  const requestNotificationPermission = () => {
+    if (!("Notification" in window)) return
+    if (Notification.permission === "default") {
+      Notification.requestPermission()
+    }
+  }
+
+  const sendNativeNotification = (title, body, icon = "❤️") => {
+    if (!("Notification" in window) || Notification.permission !== "granted") return
+    try {
+      new Notification(title, { body, icon })
+    } catch (e) {
+      // Fallback if icon fails
+      new Notification(title, { body })
+    }
+  }
 
   // PWA Prompt
   useEffect(() => {
@@ -169,6 +193,7 @@ function App() {
     else {
       setUserProfile(data)
       setIsLoggedIn(true)
+      requestNotificationPermission()
       showToast(`Welcome back, ${data.name}! 💕`)
     }
   }
@@ -181,33 +206,62 @@ function App() {
     const { data, error } = await supabase.from('profiles').insert({ name: signupName, pin: signupPin }).select().single()
     if (error) return showToast('Error creating account', 'error')
     setUserProfile(data); setIsLoggedIn(true); setSignupName(''); setSignupPin('')
+    requestNotificationPermission()
     showToast(`Account created! Welcome, ${data.name}! 💕`)
+  }
+
+  // --- CALCULATE UNREAD COUNT & FETCH DATA ---
+  const calculateUnread = (data, moduleKey) => {
+    const lastRead = localStorage.getItem(`last_read_${moduleKey}`)
+    if (!lastRead || data.length === 0) return 0
+    let count = 0
+    const readDate = new Date(lastRead)
+    for (let item of data) {
+      if (new Date(item.created_at || item.given_at) > readDate) count++
+    }
+    return count
   }
 
   const fetchPhotos = async () => {
     const { data } = await supabase.from('photos').select('*').order('created_at', { ascending: false })
-    if (data) setPhotos(data)
+    if (data) {
+      setPhotos(data)
+      setUnreadCounts(prev => ({ ...prev, gallery: calculateUnread(data, 'gallery') }))
+    }
   }
   const fetchPlans = async () => {
     const { data } = await supabase.from('plans').select('*').order('due_date', { ascending: true })
-    if (data) setPlans(data)
+    if (data) {
+      setPlans(data)
+      setUnreadCounts(prev => ({ ...prev, plans: calculateUnread(data, 'plans') }))
+    }
   }
   const fetchGifts = async () => {
     const { data } = await supabase.from('gifts').select('*, sender:profiles!sender_id(name), receiver:profiles!receiver_id(name)').order('given_at', { ascending: false })
-    if (data) setGifts(data)
+    if (data) {
+      setGifts(data)
+      setUnreadCounts(prev => ({ ...prev, gifts: calculateUnread(data, 'gifts') }))
+    }
   }
   const fetchTimeline = async () => {
     const { data } = await supabase.from('timeline').select('*').order('memory_date', { ascending: false })
-    if (data) setTimelines(data)
+    if (data) {
+      setTimelines(data)
+      setUnreadCounts(prev => ({ ...prev, timeline: calculateUnread(data, 'timeline') }))
+    }
   }
   const fetchChatMessages = async () => {
     const { data } = await supabase.from('chat_messages').select('*').order('created_at', { ascending: true })
-    if (data) setMessages(data)
+    if (data) {
+      setMessages(data)
+      setUnreadCounts(prev => ({ ...prev, chat: calculateUnread(data, 'chat') }))
+    }
   }
   const fetchQuestions = async () => {
     const { data } = await supabase.from('questions').select('*, profile:profiles(name)').order('created_at', { ascending: false })
     if (data) {
       setQuestions(data)
+      setUnreadCounts(prev => ({ ...prev, questions: calculateUnread(data, 'questions') }))
       data.forEach(async (q) => {
         const { data: ansData } = await supabase.from('answers').select('*, profile:profiles(name)').eq('question_id', q.id).order('created_at', { ascending: true })
         if (ansData) setAnswers(prev => ({ ...prev, [q.id]: ansData }))
@@ -225,6 +279,7 @@ function App() {
     if (data) {
       setSavings(data.filter(s => s.status === 'approved'))
       setPendingSavings(data.filter(s => s.status === 'pending'))
+      setUnreadCounts(prev => ({ ...prev, savings: calculateUnread(data, 'savings') }))
     }
   }
 
@@ -404,6 +459,46 @@ function App() {
     showToast('💬 Answer marked correct! 50 Shillings credited!')
   }
 
+  // --- GLOBAL REALTIME NOTIFICATION LISTENER ---
+  useEffect(() => {
+    if (!userProfile) return;
+
+    // Listen to every table's INSERT
+    const tables = ['photos', 'plans', 'gifts', 'timeline', 'questions', 'answers', 'savings', 'chat_messages'];
+    const channels = tables.map(table => {
+      return supabase.channel(`global_${table}`)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table }, payload => {
+          // Trigger Native Notification Popup
+          if (table === 'chat_messages' && payload.new.sender_name !== userProfile.name) {
+            sendNativeNotification('💬 New Message', `${payload.new.sender_name}: ${payload.new.message}`);
+          } else if (table === 'photos') {
+            sendNativeNotification('📸 Gallery Update', 'A new photo was added!');
+          } else if (table === 'plans') {
+            sendNativeNotification('📅 New Plan', `${payload.new.title} was created!`);
+          } else if (table === 'gifts' && payload.new.sender_id !== userProfile.id) {
+            sendNativeNotification('🎁 You received a gift!', 'Tap the Gifts tab to open it.');
+          } else if (table === 'timeline') {
+            sendNativeNotification('🗺️ History Update', `${payload.new.title} was added to the tree!`);
+          } else if (table === 'questions') {
+            sendNativeNotification('📥 New Question', `A new question was added to the Inbox.`);
+          } else if (table === 'answers') {
+            sendNativeNotification('💬 New Reply', `Someone replied to a question.`);
+          } else if (table === 'savings' && payload.new.profile_id !== userProfile.id) {
+            sendNativeNotification('💰 Savings Action', `Your partner made a savings request.`);
+          }
+          // Update unread counts locally instantly
+          const moduleKey = table === 'chat_messages' ? 'chat' : 
+                            table === 'photos' ? 'gallery' : table;
+          setUnreadCounts(prev => ({ ...prev, [moduleKey]: (prev[moduleKey] || 0) + 1 }));
+        })
+        .subscribe();
+    });
+
+    return () => {
+      channels.forEach(channel => supabase.removeChannel(channel));
+    };
+  }, [userProfile]);
+
   // --- EFFECTS ---
   useEffect(() => { if (currentView === 'gallery') fetchPhotos() }, [currentView])
   useEffect(() => { if (currentView === 'plans') fetchPlans() }, [currentView])
@@ -413,8 +508,7 @@ function App() {
   useEffect(() => { if (currentView === 'wallet') fetchTransactions() }, [currentView])
   useEffect(() => { if (currentView === 'savings') fetchSavings() }, [currentView])
 
-  // --- ONLINE STATUS & LAST SEEN LOGIC ---
-  // 1. Fetch and Subscribe to the Other Profile
+  // --- READ RECEIPT & ONLINE STATUS LOGIC ---
   useEffect(() => {
     if (!userProfile) return
     const fetchOther = async () => {
@@ -431,7 +525,6 @@ function App() {
     return () => supabase.removeChannel(channel)
   }, [userProfile])
 
-  // 2. Update Current User's Online Status
   useEffect(() => {
     if (!userProfile) return
     const setStatus = async (isOnline) => {
@@ -440,7 +533,7 @@ function App() {
         last_seen: isOnline ? null : new Date() 
       }).eq('id', userProfile.id)
     }
-    setStatus(true) // Mark online on load
+    setStatus(true)
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') setStatus(true)
@@ -450,21 +543,18 @@ function App() {
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
-      setStatus(false) // Mark offline on component unmount (closing app)
+      setStatus(false)
     }
   }, [userProfile])
 
-  // --- READ RECEIPT LOGIC ---
   const markMessagesAsRead = async () => {
     if (!userProfile || messages.length === 0) return
-    // Update all messages where the sender is NOT the current user, and is_read is false
     await supabase.from('chat_messages')
       .update({ is_read: true })
       .neq('sender_name', userProfile.name)
       .eq('is_read', false)
   }
 
-  // --- REALTIME EFFECTS ---
   useEffect(() => {
     if (currentView === 'chat') {
       fetchChatMessages()
@@ -474,7 +564,6 @@ function App() {
         .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'chat_messages' }, payload => setMessages(prev => prev.filter(m => m.id !== payload.old.id)))
         .subscribe()
       
-      // Mark messages as read when viewing the chat
       setTimeout(() => markMessagesAsRead(), 500)
       return () => supabase.removeChannel(channel)
     }
@@ -647,8 +736,6 @@ function App() {
                       </div>
                     )}
                   </div>
-                  
-                  {/* READ RECEIPT INDICATOR */}
                   {isMe && (
                     <div style={{fontSize:'0.65rem', color: msg.is_read ? '#10b981' : '#9ca3af', marginTop:'2px', marginRight:'4px', alignSelf:'flex-end'}}>
                       {msg.is_read ? '👁️ Read' : '✓ Sent'}
@@ -921,7 +1008,7 @@ function App() {
     )
   }
 
-  // --- HOME DASHBOARD ---
+  // --- HOME DASHBOARD WITH BADGES ---
   return (
     <div style={{fontFamily:'Inter, sans-serif', minHeight:'100vh', background:'linear-gradient(135deg, #fff0f5, #f3e8ff, #ffebf0)', padding:'2rem 1rem'}}>
       
@@ -960,7 +1047,6 @@ function App() {
             <span style={{fontWeight:'600', color:'#f43f5e'}}>{years}</span> Years, <span style={{fontWeight:'600', color:'#f43f5e'}}>{remainingDays}</span> Days, <span style={{fontWeight:'600', color:'#f43f5e'}}>{hours}</span> Hours 💫
           </div>
           
-          {/* ONLINE STATUS OF YOUR PARTNER */}
           {otherProfile && (
             <div style={{marginTop:'1rem', fontSize:'0.95rem', display:'flex', justifyContent:'center', alignItems:'center', gap:'0.5rem'}}>
               <div style={{
@@ -981,14 +1067,14 @@ function App() {
         </div>
 
         <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(140px, 1fr))', gap:'1rem'}}>
-          <MenuCard icon="📸" title="Gallery" action={() => navigateTo('gallery')} />
-          <MenuCard icon="📖" title="History Tree" action={() => navigateTo('timeline')} />
-          <MenuCard icon="📥" title="Inbox" action={() => navigateTo('questions')} />
-          <MenuCard icon="💬" title="Chat" action={() => navigateTo('chat')} />
+          <MenuCard icon="📸" title="Gallery" action={() => navigateTo('gallery')} badge={unreadCounts.gallery} />
+          <MenuCard icon="📖" title="History Tree" action={() => navigateTo('timeline')} badge={unreadCounts.timeline} />
+          <MenuCard icon="📥" title="Inbox" action={() => navigateTo('questions')} badge={unreadCounts.questions} />
+          <MenuCard icon="💬" title="Chat" action={() => navigateTo('chat')} badge={unreadCounts.chat} />
           <MenuCard icon="📞" title="Call" action={() => setCallType('video')} />
-          <MenuCard icon="📅" title="Plans" action={() => navigateTo('plans')} />
-          <MenuCard icon="🎁" title="Gifts" action={() => navigateTo('gifts')} />
-          <MenuCard icon="💰" title="Savings" action={() => navigateTo('savings')} />
+          <MenuCard icon="📅" title="Plans" action={() => navigateTo('plans')} badge={unreadCounts.plans} />
+          <MenuCard icon="🎁" title="Gifts" action={() => navigateTo('gifts')} badge={unreadCounts.gifts} />
+          <MenuCard icon="💰" title="Savings" action={() => navigateTo('savings')} badge={unreadCounts.savings} />
         </div>
         
         <button onClick={() => setIsLoggedIn(false)} style={{display:'block', margin:'3rem auto 0', background:'linear-gradient(135deg, #1f2937, #4b5563)', color:'white', padding:'0.75rem 2.5rem', border:'none', borderRadius:'2rem', fontSize:'0.95rem', cursor:'pointer', fontWeight:'500', boxShadow:'0 4px 12px rgba(0,0,0,0.1)'}}>Log Out</button>
@@ -1017,10 +1103,27 @@ const ViewWrapper = ({ title, children, goBack }) => (
   </div>
 )
 
-const MenuCard = ({ icon, title, action }) => (
-  <div onClick={action} style={{background:'white', padding:'2rem 1rem', borderRadius:'1.5rem', boxShadow:'0 4px 12px rgba(0,0,0,0.05)', textAlign:'center', cursor:'pointer', transition:'all 0.2s', border:'2px solid transparent'}} onMouseOver={(e) => {e.target.style.transform='translateY(-4px)'; e.target.style.borderColor='#f43f5e';}} onMouseOut={(e) => {e.target.style.transform='translateY(0)'; e.target.style.borderColor='transparent';}}>
+const MenuCard = ({ icon, title, action, badge }) => (
+  <div onClick={action} style={{position:'relative', background:'white', padding:'2rem 1rem', borderRadius:'1.5rem', boxShadow:'0 4px 12px rgba(0,0,0,0.05)', textAlign:'center', cursor:'pointer', transition:'all 0.2s', border:'2px solid transparent'}} onMouseOver={(e) => {e.target.style.transform='translateY(-4px)'; e.target.style.borderColor='#f43f5e';}} onMouseOut={(e) => {e.target.style.transform='translateY(0)'; e.target.style.borderColor='transparent';}}>
     <div style={{fontSize:'2.5rem', marginBottom:'0.5rem'}}>{icon}</div>
     <div style={{fontWeight:'600', color:'#1f2937'}}>{title}</div>
+    {badge > 0 && (
+      <div style={{
+        position: 'absolute',
+        top: '-5px',
+        right: '-5px',
+        background: '#ef4444',
+        color: 'white',
+        fontSize: '0.7rem',
+        fontWeight: 'bold',
+        padding: '0.2rem 0.5rem',
+        borderRadius: '1rem',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+        zIndex: 10
+      }}>
+        {badge > 99 ? '99+' : badge}
+      </div>
+    )}
   </div>
 )
 
