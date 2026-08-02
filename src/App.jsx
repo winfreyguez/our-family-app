@@ -31,26 +31,24 @@ const randomColor = () => {
 }
 
 function App() {
-  // --- STATE ---
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [pin, setPin] = useState('')
   const [currentView, setCurrentView] = useState('home')
   const [toast, setToast] = useState(null)
   const [loading, setLoading] = useState(false)
   
-  // --- DATA STATE ---
   const [photos, setPhotos] = useState([])
   const [plans, setPlans] = useState([])
   const [gifts, setGifts] = useState([])
   const [timelines, setTimelines] = useState([])
   const [questions, setQuestions] = useState([])
   const [answers, setAnswers] = useState({})
-  const [messages, setMessages] = useState([]) // Chat messages
+  const [messages, setMessages] = useState([])
   
-  // --- INPUT STATE ---
   const [planTitle, setPlanTitle] = useState('')
   const [planDate, setPlanDate] = useState('')
   const [giftMsg, setGiftMsg] = useState('')
+  const [giftType, setGiftType] = useState('Custom Message') // NEW: Gift Type
   const [isUploading, setIsUploading] = useState(false)
   const [tlTitle, setTlTitle] = useState('')
   const [tlDesc, setTlDesc] = useState('')
@@ -59,27 +57,23 @@ function App() {
   const [replyingTo, setReplyingTo] = useState(null)
   const [replyText, setReplyText] = useState('')
   
-  // --- CHAT STATE ---
-  const [myName, setMyName] = useState('You') // Default sender name
+  const [myName, setMyName] = useState('You') 
   const [chatInput, setChatInput] = useState('')
 
-  // --- GIFT ANIMATION ---
   const [activeParticleGift, setActiveParticleGift] = useState(null)
 
-  // --- TOAST ---
   const showToast = (msg, type = 'success') => {
     setToast({ message: msg, type })
     setTimeout(() => setToast(null), 3000)
   }
 
-  // --- AUTH ---
   const handleLogin = (e) => {
     e.preventDefault()
     if (pin === CORRECT_PIN) setIsLoggedIn(true)
     else { showToast('Wrong PIN!', 'error'); setPin('') }
   }
 
-  // --- DATA FETCHING ---
+  // --- FETCH FUNCTIONS ---
   const fetchPhotos = async () => {
     const { data } = await supabase.from('photos').select('*').order('created_at', { ascending: false })
     if (data) setPhotos(data)
@@ -118,7 +112,6 @@ function App() {
     const path = `family_${Date.now()}.jpg`
     const { error } = await supabase.storage.from('gallery').upload(path, file)
     if (!error) {
-      // FIX: Manually construct the URL to guarantee it works
       const publicUrl = `https://vnxtrumkvuvsuhhvucjm.supabase.co/storage/v1/object/public/gallery/${path}`
       await supabase.from('photos').insert({ storage_path: publicUrl })
       fetchPhotos(); showToast('Photo uploaded! 💕')
@@ -142,12 +135,25 @@ function App() {
     await supabase.from('plans').delete().eq('id', id); fetchPlans(); showToast('Plan deleted')
   }
 
+  // --- LUXURY GIFTS UPDATE ---
   const sendGift = async () => {
     if (!giftMsg) return showToast('Write a message!', 'error')
+    let prefix = '';
+    if (giftType !== 'Custom Message') {
+      const giftEmojis = {
+        'Jewelry': '💍',
+        'Subscription Box': '📦',
+        'Luxury Weighted Blanket': '🛏️',
+        'Spa Package': '🧖',
+        'Digital Gift Card': '💳'
+      };
+      prefix = `${giftEmojis[giftType] || '🎁'} ${giftType}: `;
+    }
     const emoji = GIFT_EMOJIS[Math.floor(Math.random() * GIFT_EMOJIS.length)]
-    await supabase.from('gifts').insert({ message: `${emoji} ${giftMsg}` })
+    await supabase.from('gifts').insert({ message: `${prefix}${emoji} ${giftMsg}` })
     setGiftMsg(''); fetchGifts(); showToast(`Gift sent! ${emoji}`)
   }
+  
   const sendHeartGift = async () => {
     const emoji = '❤️'
     await supabase.from('gifts').insert({ message: `${emoji} I Love You 💕` })
@@ -160,14 +166,13 @@ function App() {
 
   const addTimeline = async () => {
     if (!tlTitle || !tlDate) return showToast('Fill in title & date!', 'error')
-    await supabase.from('timeline').insert({ title: tlTitle, description: tlDesc, memory_date: tlDate })
-    setTlTitle(''); setTlDesc(''); setTlDate(''); fetchTimeline(); showToast('Memory added to history! 🗺️')
+    await supabase.from('timeline').insert({ title: tlTitle, description: tlDesc || 'A beautiful memory ✨', memory_date: tlDate })
+    setTlTitle(''); setTlDesc(''); setTlDate(''); fetchTimeline(); showToast('Memory added! 🗺️')
   }
   const deleteTimeline = async (id) => {
     await supabase.from('timeline').delete().eq('id', id); fetchTimeline(); showToast('Memory removed')
   }
 
-  // --- WHATSAPP CHAT ACTIONS ---
   const sendChatMessage = async () => {
     if (!chatInput.trim()) return
     await supabase.from('chat_messages').insert({ sender_name: myName, message: chatInput })
@@ -197,7 +202,7 @@ function App() {
   useEffect(() => { if (currentView === 'timeline') fetchTimeline() }, [currentView])
   useEffect(() => { if (currentView === 'questions') fetchQuestions() }, [currentView])
 
-  // Realtime Chat Effect
+  // Realtime Chat & Timeline Effect (Instant updates!)
   useEffect(() => {
     if (currentView === 'chat') {
       fetchChatMessages()
@@ -210,7 +215,6 @@ function App() {
     }
   }, [currentView])
 
-  // --- DAYS ---
   const daysTogether = Math.floor((new Date() - START_DATE) / (1000 * 60 * 60 * 24))
 
   // --- LOGIN ---
@@ -234,7 +238,6 @@ function App() {
   }
 
   // --- VIEWS ---
-
   if (currentView === 'gallery') {
     return (
       <ViewWrapper title="📸 Shared Gallery" goHome={() => setCurrentView('home')}>
@@ -245,7 +248,7 @@ function App() {
         {photos.length === 0 ? (
           <div style={{padding:'3rem 1rem', background:'white', borderRadius:'1rem', color:'#9ca3af', border:'2px dashed #e5e7eb'}}>
             <div style={{fontSize:'3rem'}}>🖼️</div>
-            <p>No memories yet. Upload your first photo together! (Don't forget to refresh)</p>
+            <p>No memories yet. Upload your first photo together!</p>
           </div>
         ) : (
           <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:'1.5rem'}}>
@@ -266,7 +269,7 @@ function App() {
       <ViewWrapper title="🗺️ History Tree" goHome={() => setCurrentView('home')}>
         <div style={{display:'flex', flexWrap:'wrap', gap:'0.75rem', justifyContent:'center', marginBottom:'2rem'}}>
           <input type="text" placeholder="Memory title..." value={tlTitle} onChange={(e) => setTlTitle(e.target.value)} style={{padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none', width:'180px'}} />
-          <input type="text" placeholder="Description (optional)" value={tlDesc} onChange={(e) => setTlDesc(e.target.value)} style={{padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none', width:'180px'}} />
+          <input type="text" placeholder="Description" value={tlDesc} onChange={(e) => setTlDesc(e.target.value)} style={{padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none', width:'180px'}} />
           <input type="date" value={tlDate} onChange={(e) => setTlDate(e.target.value)} style={{padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none'}} />
           <button onClick={addTimeline} style={{background:'#f43f5e', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer'}}>Add to Tree</button>
         </div>
@@ -276,7 +279,7 @@ function App() {
               <div style={{background:'#f43f5e', color:'white', borderRadius:'50%', width:'32px', height:'32px', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'bold', zIndex:2, boxShadow:'0 0 0 4px #fff0f5'}}>{idx + 1}</div>
               <div style={{flex:1, background:'white', padding:'1rem', borderRadius:'1rem', boxShadow:'0 2px 8px rgba(0,0,0,0.05)', position:'relative'}}>
                 <div style={{fontWeight:'600', fontSize:'1rem'}}>{t.title}</div>
-                <div style={{fontSize:'0.9rem', color:'#4b5563'}}>{t.description || 'A beautiful memory ✨'}</div>
+                <div style={{fontSize:'0.9rem', color:'#4b5563'}}>{t.description}</div>
                 <div style={{fontSize:'0.8rem', color:'#9ca3af', marginTop:'0.5rem'}}>📅 {new Date(t.memory_date).toLocaleDateString()}</div>
                 <button onClick={() => deleteTimeline(t.id)} style={{position:'absolute', top:'8px', right:'8px', background:'none', border:'none', color:'#9ca3af', cursor:'pointer', fontSize:'0.9rem'}}>✕</button>
               </div>
@@ -291,20 +294,15 @@ function App() {
   if (currentView === 'chat') {
     return (
       <div style={{fontFamily:'"Inter", sans-serif', height:'100vh', background:'#f0f2f5', display:'flex', flexDirection:'column', overflow:'hidden'}}>
-        {/* Chat Header */}
         <div style={{background:'#f43f5e', color:'white', padding:'1rem 1.5rem', display:'flex', justifyContent:'space-between', alignItems:'center', boxShadow:'0 2px 4px rgba(0,0,0,0.1)'}}>
           <button onClick={() => setCurrentView('home')} style={{background:'none', border:'none', color:'white', fontSize:'1.2rem', cursor:'pointer'}}>←</button>
           <div style={{fontWeight:'700', fontSize:'1.1rem'}}>💬 Family Chat</div>
           <div style={{width:'24px'}}></div>
         </div>
-
-        {/* Sender Name Input */}
         <div style={{padding:'0.75rem 1rem', background:'white', borderBottom:'1px solid #e5e7eb', textAlign:'center', fontSize:'0.9rem'}}>
           <span style={{color:'#4b5563'}}>Your name: </span>
           <input type="text" value={myName} onChange={(e) => setMyName(e.target.value)} style={{padding:'0.25rem 0.5rem', border:'1px solid #d1d5db', borderRadius:'0.5rem', outline:'none'}} />
         </div>
-
-        {/* Messages Container */}
         <div style={{flex:1, overflowY:'auto', padding:'1rem 1.5rem', display:'flex', flexDirection:'column', gap:'0.75rem'}}>
           {messages.map((msg) => {
             const isMe = msg.sender_name === myName;
@@ -319,8 +317,6 @@ function App() {
             )
           })}
         </div>
-
-        {/* Chat Input */}
         <div style={{background:'white', padding:'0.75rem 1rem', display:'flex', gap:'0.75rem', borderTop:'1px solid #e5e7eb'}}>
           <input type="text" placeholder="Type a message..." value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendChatMessage()} style={{flex:1, padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'2rem', outline:'none'}} />
           <button onClick={sendChatMessage} style={{background:'#f43f5e', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'2rem', fontWeight:'600', cursor:'pointer'}}>Send</button>
@@ -338,12 +334,12 @@ function App() {
           <button onClick={askRandomQuestion} style={{background:'#f43f5e', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer'}}>Surprise Me ✨</button>
         </div>
         <div style={{maxWidth:'600px', margin:'0 auto'}}>
-          {questions.length === 0 ? <p style={{color:'#9ca3af'}}>No questions yet. Ask the first one!</p> : (
+          {questions.length === 0 ? <p style={{color:'#9ca3af'}}>No questions yet.</p> : (
             questions.map(q => (
               <div key={q.id} style={{background:'white', padding:'1.5rem', borderRadius:'1.5rem', marginBottom:'1.5rem', boxShadow:'0 2px 8px rgba(0,0,0,0.05)'}}>
                 <div style={{fontWeight:'600', fontSize:'1.1rem', color:'#1f2937', marginBottom:'0.5rem'}}>"{q.text}"</div>
                 <div style={{fontSize:'0.8rem', color:'#9ca3af', marginBottom:'1rem'}}>{(answers[q.id] || []).length} replies</div>
-                {(answers[q.id] || []).map(a => <div key={a.id} style={{background:'#f9fafb', padding:'0.75rem 1rem', borderRadius:'0.75rem', marginBottom:'0.5rem', borderLeft:'4px solid #f43f5e', textAlign:'left'}}>💬 {a.answer}</div>)}
+                {(answers[q.id] || []).map(a => <div key={a.id} style={{background:'#f9fafb', padding:'0.75rem 1rem', borderRadius:'0.75rem', marginBottom:'0.5rem', borderLeft:'4px solid #f43f5e'}}>💬 {a.answer}</div>)}
                 {replyingTo === q.id ? (
                   <div style={{display:'flex', gap:'0.5rem', marginTop:'1rem'}}>
                     <input type="text" placeholder="Write your reply..." value={replyText} onChange={(e) => setReplyText(e.target.value)} style={{flex:'1', padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none'}} />
@@ -389,8 +385,19 @@ function App() {
     return (
       <ViewWrapper title="🎁 Gifts" goHome={() => setCurrentView('home')}>
         <div style={{display:'flex', flexWrap:'wrap', gap:'0.75rem', justifyContent:'center', marginBottom:'2rem'}}>
-          <input type="text" placeholder="Write a sweet message..." value={giftMsg} onChange={(e) => setGiftMsg(e.target.value)} style={{flex:'1', padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none', minWidth:'200px'}} />
-          <button onClick={sendGift} style={{background:'#f43f5e', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer'}}>Send Message ✨</button>
+          
+          {/* New Gift Type Selector */}
+          <select value={giftType} onChange={(e) => setGiftType(e.target.value)} style={{padding:'0.75rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none', background:'white'}}>
+            <option value="Custom Message">Custom Message ✨</option>
+            <option value="Jewelry">💍 Jewelry</option>
+            <option value="Subscription Box">📦 Subscription Box</option>
+            <option value="Luxury Weighted Blanket">🛏️ Luxury Blanket</option>
+            <option value="Spa Package">🧖 Spa Package</option>
+            <option value="Digital Gift Card">💳 Digital Gift Card</option>
+          </select>
+
+          <input type="text" placeholder="Write a sweet message..." value={giftMsg} onChange={(e) => setGiftMsg(e.target.value)} style={{flex:'1', padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none', minWidth:'150px'}} />
+          <button onClick={sendGift} style={{background:'#f43f5e', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer'}}>Send Gift ✨</button>
           <button onClick={sendHeartGift} style={{background:'#00d2ff', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer', boxShadow:'0 4px 12px rgba(0,210,255,0.4)'}}>Send ❤️ I Love You</button>
         </div>
         <div style={{maxWidth:'600px', margin:'0 auto'}}>
