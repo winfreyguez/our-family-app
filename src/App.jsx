@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
 import ParticleGift from './ParticleGift'
 
-// --- LIVELY GIFTS CATALOG (30+ unique gifts!) ---
+// --- LIVELY GIFTS CATALOG ---
 const LIVELY_GIFTS = [
   { label: 'Good Morning ☀️', price: 50, category: 'Daily Love' },
   { label: 'Goodnight 🌙', price: 50, category: 'Daily Love' },
@@ -59,7 +59,6 @@ const randomColor = () => {
 }
 
 function App() {
-  // --- CUSTOM ACCOUNTS ---
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [pin, setPin] = useState('')
   const [loginMode, setLoginMode] = useState('login') 
@@ -67,7 +66,6 @@ function App() {
   const [signupPin, setSignupPin] = useState('')
   const [userProfile, setUserProfile] = useState(null)
 
-  // --- NAVIGATION STACK (Normal back button support) ---
   const [historyStack, setHistoryStack] = useState(['home']);
   const navigateTo = (view) => {
     setHistoryStack(prev => [...prev, view]);
@@ -95,10 +93,9 @@ function App() {
   const [answers, setAnswers] = useState({})
   const [messages, setMessages] = useState([])
   const [transactions, setTransactions] = useState([])
-  const [savings, setSavings] = useState([]) // Savings Data
-  const [pendingSavings, setPendingSavings] = useState([]) // Pending savings (Withdrawals)
+  const [savings, setSavings] = useState([]) 
+  const [pendingSavings, setPendingSavings] = useState([]) 
   
-  // --- INPUT STATES ---
   const [planCategory, setPlanCategory] = useState('General')
   const [planPrice, setPlanPrice] = useState('')
   const [planTitle, setPlanTitle] = useState('')
@@ -122,7 +119,6 @@ function App() {
   const [activeParticleGift, setActiveParticleGift] = useState(null)
   const [openingGift, setOpeningGift] = useState(null)
 
-  // --- SAVINGS INPUTS ---
   const [savingsAmount, setSavingsAmount] = useState('')
   const [withdrawAmount, setWithdrawAmount] = useState('')
   const [withdrawReason, setWithdrawReason] = useState('')
@@ -132,7 +128,6 @@ function App() {
     setTimeout(() => setToast(null), 3000)
   }
 
-  // --- CUSTOM AUTH ---
   const handleLogin = async (e) => {
     e.preventDefault()
     if (!pin) return showToast('Enter your PIN', 'error')
@@ -156,7 +151,6 @@ function App() {
     showToast(`Account created! Welcome, ${data.name}! 💕`)
   }
 
-  // --- FETCHERS ---
   const fetchPhotos = async () => {
     const { data } = await supabase.from('photos').select('*').order('created_at', { ascending: false })
     if (data) setPhotos(data)
@@ -201,7 +195,6 @@ function App() {
     }
   }
 
-  // --- ACTIONS ---
   const uploadPhoto = async (e) => {
     const file = e.target.files[0]; if (!file) return
     setIsUploading(true)
@@ -219,27 +212,26 @@ function App() {
     await supabase.from('photos').delete().eq('id', id); fetchPhotos(); showToast('Photo deleted')
   }
 
-  // --- PLANS WITH APPROVALS ---
   const addPlan = async () => {
     if (!planTitle || !planDate) return showToast('Fill in title & date!', 'error')
-    const isApprover1 = userProfile.id === 1; // Just a logical check, both will be true eventually
     await supabase.from('plans').insert({ 
       title: planTitle, 
       due_date: planDate, 
       category: planCategory, 
       target_price: parseInt(planPrice) || 0,
-      approved_by_1: true, // Creator auto-approves
-      approved_by_2: false  // Wait for partner
+      approved_by_1: true,
+      approved_by_2: false
     })
     setPlanTitle(''); setPlanDate(''); setPlanPrice(''); fetchPlans(); showToast(`📅 Plan created! Waiting for approval.`)
   }
   const approvePlan = async (id) => {
-    // Check which approver the current user is
     await supabase.from('plans').update({ approved_by_2: true }).eq('id', id)
     fetchPlans(); showToast('✅ Plan approved by both!')
   }
+  const deletePlan = async (id) => {
+    await supabase.from('plans').delete().eq('id', id); fetchPlans(); showToast('Plan deleted')
+  }
 
-  // --- QUESTIONS: EDIT/DELETE ---
   const deleteQuestion = async (id) => {
     if(window.confirm("Delete this question?")) {
       await supabase.from('questions').delete().eq('id', id); fetchQuestions(); showToast('Question deleted')
@@ -254,7 +246,6 @@ function App() {
     setEditingQId(null); fetchQuestions(); showToast('Question updated')
   }
 
-  // --- CHAT: IMAGES, EDIT, DELETE ---
   const uploadChatImage = async (e) => {
     const file = e.target.files[0]; if (!file || !userProfile) return
     const path = `chat_${Date.now()}.jpg`
@@ -279,7 +270,6 @@ function App() {
     setEditingMsgId(null); fetchChatMessages(); showToast('Message updated')
   }
 
-  // --- SAVINGS LOGIC ---
   const addDeposit = async () => {
     if (!savingsAmount || parseInt(savingsAmount) <= 0) return showToast('Enter a valid amount!', 'error')
     await supabase.from('savings').insert({ profile_id: userProfile.id, amount: parseInt(savingsAmount), type: 'deposit', status: 'approved' })
@@ -300,7 +290,6 @@ function App() {
     fetchSavings(); showToast('❌ Withdrawal rejected.')
   }
 
-  // --- GIFT LOGIC ---
   const sendGift = async (livelyGift = null) => {
     if (!userProfile) return showToast('Please log in', 'error');
     const now = new Date();
@@ -391,7 +380,7 @@ function App() {
   useEffect(() => { if (currentView === 'wallet') fetchTransactions() }, [currentView])
   useEffect(() => { if (currentView === 'savings') fetchSavings() }, [currentView])
 
-  // Chat & Realtime Effects
+  // Chat & Realtime
   useEffect(() => {
     if (currentView === 'chat') {
       fetchChatMessages()
@@ -637,7 +626,6 @@ function App() {
             const isOverdue = new Date(p.due_date) < new Date() && p.status !== 'done'
             const categoryColors = { 'Date Night': '#fce7f3', 'Family Trip': '#e0f2fe', 'Home Project': '#fef3c7', 'Health & Wellness': '#d1fae5', 'General': '#f3f4f6' };
             const displayPrice = p.target_price && p.target_price > 0 ? `${p.target_price} KSh` : null;
-            const isApprovedByMe = p.approved_by_1 || p.approved_by_2;
             const isFullyApproved = p.approved_by_1 && p.approved_by_2;
             return (
               <div key={p.id} style={{display:'flex', alignItems:'center', justifyContent:'space-between', background: categoryColors[p.category] || '#f3f4f6', padding:'0.75rem 1.5rem', margin:'0.75rem 0', borderRadius:'1rem', boxShadow:'0 2px 8px rgba(0,0,0,0.05)', borderLeft: isOverdue ? '6px solid #ef4444' : isFullyApproved ? '6px solid #22c55e' : '6px solid #f43f5e', opacity: p.status === 'done' ? '0.7' : '1'}}>
@@ -755,7 +743,6 @@ function App() {
   }
 
   if (currentView === 'savings') {
-    // Calculate totals per user and globally
     const totalSavings = savings.reduce((acc, s) => s.type === 'deposit' ? acc + s.amount : acc - s.amount, 0);
     const mySavings = savings.filter(s => s.profile_id === userProfile.id).reduce((acc, s) => s.type === 'deposit' ? acc + s.amount : acc - s.amount, 0);
     
@@ -851,13 +838,30 @@ function App() {
   )
 }
 
-// --- UPDATED VIEW WRAPPER: Now with normal native-like back button ---
+// --- FIXED VIEW WRAPPER - PARSER WILL NO LONGER CRASH ---
 const ViewWrapper = ({ title, children, goBack }) => (
   <div style={{fontFamily:'"Inter", sans-serif', minHeight:'100vh', background:'linear-gradient(135deg, #fff0f5 0%, #f3e8ff 50%, #ffebf0 100%)', padding:'2rem 1rem', textAlign:'center', position:'relative'}}>
     <div style={{maxWidth:'800px', margin:'0 auto'}}>
-      {/* NATIVE-LIKE BACK BUTTON - Left aligned, standard placement */}
       <div style={{display:'flex', justifyContent:'flex-start', marginBottom:'1rem', paddingLeft:'0.5rem'}}>
-        <button onClick={goBack} style={{background:'none', border:'none', fontSize:'1.2rem', cursor:'pointer', color:'#f43f5e', fontWeight:'600', display:'flex', alignItems:'center', gap:'0.3rem', transition:'0.2s'}} onMouseOver={(e) => e.target.style.transform='translateX(-4px)'} onMouseOut={(e) => e.target.style.transform='translateX(0)'>← Back</button>
+        <button
+          onClick={goBack}
+          style={{
+            background: 'none',
+            border: 'none',
+            fontSize: '1.2rem',
+            cursor: 'pointer',
+            color: '#f43f5e',
+            fontWeight: '600',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.3rem',
+            transition: '0.2s'
+          }}
+          onMouseOver={(e) => e.target.style.transform = 'translateX(-4px)'}
+          onMouseOut={(e) => e.target.style.transform = 'translateX(0)'}
+        >
+          <span>&larr;</span> Back
+        </button>
       </div>
       <h2 style={{background:'linear-gradient(135deg, #1f2937, #4b5563)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', fontSize:'2rem', fontWeight:'700', marginBottom:'2rem', display:'inline-block'}}>{title}</h2>
       {children}
