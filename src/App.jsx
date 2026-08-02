@@ -7,25 +7,38 @@ function App() {
   const [password, setPassword] = useState('')
 
   useEffect(() => {
+    if (!supabase) return; // Don't run if keys are missing
     supabase.auth.getSession().then(({ data }) => setUser(data.session?.user || null))
   }, [])
 
   const login = async (e) => {
     e.preventDefault()
+    if (!supabase) { alert('Keys missing!'); return; }
     const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) {
-      alert('Wrong email/password!')
-    }
+    if (error) alert('Wrong email/password!')
   }
 
   const signUp = async (e) => {
     e.preventDefault()
+    if (!supabase) { alert('Keys missing!'); return; }
     const { error } = await supabase.auth.signUp({ email, password })
     if (error) {
       alert(error.message)
     } else {
       alert('Account created! Check email to confirm.')
     }
+  }
+
+  // THIS saves you from the blank white screen!
+  if (!supabase) {
+    return (
+      <div style={{display:'flex', justifyContent:'center', alignItems:'center', height:'100vh', background:'#ffcccc', padding:'1rem', textAlign:'center', fontFamily:'sans-serif'}}>
+        <div>
+          <h1>🔑 Supabase Keys Missing</h1>
+          <p>Please make sure <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> are saved in your Render Environment Variables.</p>
+        </div>
+      </div>
+    )
   }
 
   if (!user) {
