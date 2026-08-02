@@ -41,15 +41,25 @@ function App() {
   const [photos, setPhotos] = useState([])
   const [plans, setPlans] = useState([])
   const [gifts, setGifts] = useState([])
-  const [currentQuestion, setCurrentQuestion] = useState(null)
-  const [answers, setAnswers] = useState([])
+  const [timelines, setTimelines] = useState([])
+  const [questions, setQuestions] = useState([])
+  const [answers, setAnswers] = useState({}) // Object keyed by question ID
   
   // --- INPUT STATE ---
   const [planTitle, setPlanTitle] = useState('')
   const [planDate, setPlanDate] = useState('')
   const [giftMsg, setGiftMsg] = useState('')
-  const [answerText, setAnswerText] = useState('')
   const [isUploading, setIsUploading] = useState(false)
+  
+  // Timeline Inputs
+  const [tlTitle, setTlTitle] = useState('')
+  const [tlDesc, setTlDesc] = useState('')
+  const [tlDate, setTlDate] = useState('')
+  
+  // Question Inputs
+  const [newQuestionText, setNewQuestionText] = useState('')
+  const [replyingTo, setReplyingTo] = useState(null)
+  const [replyText, setReplyText] = useState('')
 
   // --- TOAST ---
   const showToast = (msg, type = 'success') => {
@@ -77,17 +87,21 @@ function App() {
     const { data } = await supabase.from('gifts').select('*').order('given_at', { ascending: false })
     if (data) setGifts(data)
   }
-  const fetchRandomQuestion = async () => {
-    setLoading(true); setCurrentQuestion(null); setAnswers([])
-    const { data } = await supabase.from('questions').select('*').order('random()').limit(1).single()
+  const fetchTimeline = async () => {
+    const { data } = await supabase.from('timeline').select('*').order('memory_date', { ascending: false })
+    if (data) setTimelines(data)
+  }
+  
+  const fetchQuestions = async () => {
+    const { data } = await supabase.from('questions').select('*').order('created_at', { ascending: false })
     if (data) {
-      setCurrentQuestion(data)
-      const { data: ansData } = await supabase.from('answers').select('*').eq('question_id', data.id)
-      if (ansData) setAnswers(ansData)
-    } else {
-      showToast('No questions found! Run the SQL seed.', 'error')
+      setQuestions(data)
+      // Fetch answers for all questions
+      data.forEach(async (q) => {
+        const { data: ansData } = await supabase.from('answers').select('*').eq('question_id', q.id).order('created_at', { ascending: true })
+        if (ansData) setAnswers(prev => ({ ...prev, [q.id]: ansData }))
+      })
     }
-    setLoading(false)
   }
 
   // --- ACTIONS ---
@@ -98,9 +112,9 @@ function App() {
     const { error } = await supabase.storage.from('gallery').upload(path, file)
     if (!error) {
       const { data: urlData } = supabase.storage.from('gallery').getPublicUrl(path)
-      await supabase.from('photos').insert({ storage_path: urlData.publicUrl, caption: 'Our memory ✨' })
+      await supabase.from('photos').insert({ storage_path: urlData.publicUrl })
       fetchPhotos(); showToast('Photo uploaded! 💕')
-    } else showToast('Upload failed! Make sure bucket is public.', 'error')
+    } else showToast('Upload failed! Check bucket is public.', 'error')
     setIsUploading(false)
   }
   const deletePhoto = async (id) => {
@@ -110,7 +124,7 @@ function App() {
   const addPlan = async () => {
     if (!planTitle || !planDate) return showToast('Fill in title & date!', 'error')
     await supabase.from('plans').insert({ title: planTitle, due_date: planDate })
-    setPlanTitle(''); setPlanDate(''); fetchPlans(); showToast(`Plan "${planTitle}" added! 📅`)
+    setPlanTitle(''); setPlanDate(''); fetchPlans(); showToast(`Plan added! 📅`)
   }
   const togglePlan = async (id, currentStatus) => {
     await supabase.from('plans').update({ status: currentStatus === 'done' ? 'pending' : 'done' }).eq('id', id)
@@ -124,24 +138,54 @@ function App() {
     if (!giftMsg) return showToast('Write a message!', 'error')
     const emoji = GIFT_EMOJIS[Math.floor(Math.random() * GIFT_EMOJIS.length)]
     await supabase.from('gifts').insert({ message: `${emoji} ${giftMsg}` })
-    setGiftMsg('')
-    fetchGifts(); showToast(`Gift sent with love! ${emoji}`)
+    setGiftMsg(''); fetchGifts(); showToast(`Gift sent! ${emoji}`)
   }
   const deleteGift = async (id) => {
     await supabase.from('gifts').delete().eq('id', id); fetchGifts(); showToast('Gift removed')
   }
 
-  const submitAnswer = async () => {
-    if (!answerText || !currentQuestion) return
-    await supabase.from('answers').insert({ question_id: currentQuestion.id, answer: answerText })
-    setAnswerText(''); fetchRandomQuestion(); showToast('Answer saved! ❤️')
+  const addTimeline = async () => {
+    if (!tlTitle || !tlDate) return showToast('Fill in title & date!', 'error')
+    await supabase.from('timeline').insert({ title: tlTitle, description: tlDesc, memory_date: tlDate })
+    setTlTitle(''); setTlDesc(''); setTlDate(''); fetchTimeline(); showToast('Memory added to history! 🗺️')
+  }
+  const deleteTimeline = async (id) => {
+    await supabase.from('timeline').delete().eq('id', id); fetchTimeline(); showToast('Memory removed')
+  }
+
+  // --- QUESTION INBOX ACTIONS ---
+  const askRandomQuestion = async () => {
+    const { data } = await supabase.from('questions').select('*').order('random()').limit(1).single()
+    if (data) {
+      setNewQuestionText('') // Clear manual input
+      showToast(`Question added to inbox!`, 'success')
+      fetchQuestions()
+    } else {
+      showToast('Run the SQL seed to add questions!', 'error')
+    }
+  }
+  
+  const askManualQuestion = async () => {
+    if (!newQuestionText) return showToast('Write your own question!', 'error')
+    await supabase.from('questions').insert({ text: newQuestionText, category: 'Manual' })
+    setNewQuestionText('')
+    showToast('Your question was sent to the inbox! 📥')
+    fetchQuestions()
+  }
+
+  const submitReply = async (questionId) => {
+    if (!replyText) return showToast('Write a reply!', 'error')
+    await supabase.from('answers').insert({ question_id: questionId, answer: replyText })
+    setReplyText(''); setReplyingTo(null)
+    fetchQuestions(); showToast('Reply sent! 💬')
   }
 
   // --- EFFECTS ---
   useEffect(() => { if (currentView === 'gallery') fetchPhotos() }, [currentView])
   useEffect(() => { if (currentView === 'plans') fetchPlans() }, [currentView])
   useEffect(() => { if (currentView === 'gifts') fetchGifts() }, [currentView])
-  useEffect(() => { if (currentView === 'questions') fetchRandomQuestion() }, [currentView])
+  useEffect(() => { if (currentView === 'timeline') fetchTimeline() }, [currentView])
+  useEffect(() => { if (currentView === 'questions') fetchQuestions() }, [currentView])
 
   // --- DAYS ---
   const daysTogether = Math.floor((new Date() - START_DATE) / (1000 * 60 * 60 * 24))
@@ -189,29 +233,72 @@ function App() {
     )
   }
 
+  if (currentView === 'timeline') {
+    return (
+      <ViewWrapper title="🗺️ History Tree" goHome={() => setCurrentView('home')}>
+        <div style={{display:'flex', flexWrap:'wrap', gap:'0.75rem', justifyContent:'center', marginBottom:'2rem'}}>
+          <input type="text" placeholder="Memory title..." value={tlTitle} onChange={(e) => setTlTitle(e.target.value)} style={{padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none', width:'180px'}} />
+          <input type="text" placeholder="Description (optional)" value={tlDesc} onChange={(e) => setTlDesc(e.target.value)} style={{padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none', width:'180px'}} />
+          <input type="date" value={tlDate} onChange={(e) => setTlDate(e.target.value)} style={{padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none'}} />
+          <button onClick={addTimeline} style={{background:'#f43f5e', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer'}}>Add to Tree</button>
+        </div>
+        <div style={{maxWidth:'600px', margin:'0 auto', textAlign:'left'}}>
+          {timelines.map((t, idx) => (
+            <div key={t.id} style={{display:'flex', gap:'1rem', marginBottom:'1.5rem', position:'relative'}}>
+              <div style={{background:'#f43f5e', color:'white', borderRadius:'50%', width:'32px', height:'32px', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'bold', zIndex:2, boxShadow:'0 0 0 4px #fff0f5'}}>{idx + 1}</div>
+              <div style={{flex:1, background:'white', padding:'1rem', borderRadius:'1rem', boxShadow:'0 2px 8px rgba(0,0,0,0.05)', position:'relative'}}>
+                <div style={{fontWeight:'600', fontSize:'1rem'}}>{t.title}</div>
+                <div style={{fontSize:'0.9rem', color:'#4b5563'}}>{t.description || 'A beautiful memory ✨'}</div>
+                <div style={{fontSize:'0.8rem', color:'#9ca3af', marginTop:'0.5rem'}}>📅 {new Date(t.memory_date).toLocaleDateString()}</div>
+                <button onClick={() => deleteTimeline(t.id)} style={{position:'absolute', top:'8px', right:'8px', background:'none', border:'none', color:'#9ca3af', cursor:'pointer', fontSize:'0.9rem'}}>✕</button>
+              </div>
+            </div>
+          ))}
+          {timelines.length === 0 && <p style={{textAlign:'center', color:'#9ca3af', padding:'2rem'}}>Start building your family history tree! 🌳</p>}
+        </div>
+      </ViewWrapper>
+    )
+  }
+
   if (currentView === 'questions') {
     return (
-      <ViewWrapper title="❓ Past Questions" goHome={() => setCurrentView('home')}>
-        <button onClick={fetchRandomQuestion} style={{background:'#f43f5e', color:'white', padding:'0.75rem 2rem', border:'none', borderRadius:'2rem', fontSize:'1rem', fontWeight:'600', cursor:'pointer', marginBottom:'2rem', boxShadow:'0 4px 8px rgba(244, 63, 94, 0.2)'}}>Surprise Me! ✨</button>
-        {loading ? (
-          <div style={{padding:'2rem', fontSize:'2rem'}}>💭</div>
-        ) : currentQuestion ? (
-          <div style={{background:'white', padding:'2rem', borderRadius:'1.5rem', boxShadow:'0 8px 20px rgba(0,0,0,0.05)', maxWidth:'600px', margin:'0 auto'}}>
-            {/* BULLETPROOF SPAN METHOD - PARSER WILL NEVER BREAK HERE */}
-            <p style={{fontSize:'1.2rem', fontWeight:'600', color:'#1f2937', marginBottom:'1.5rem', lineHeight:'1.6'}}>
-              <span>"</span>{currentQuestion.text}<span>"</span>
-            </p>
-            <div style={{display:'flex', gap:'0.5rem', marginBottom:'1.5rem'}}>
-              <input type="text" placeholder="Write your memory..." value={answerText} onChange={(e) => setAnswerText(e.target.value)} style={{flex:'1', padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none'}} />
-              <button onClick={submitAnswer} style={{background:'#1f2937', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', cursor:'pointer', fontWeight:'600'}}>Reply</button>
-            </div>
-            <div style={{textAlign:'left'}}>
-              <p style={{fontSize:'0.9rem', color:'#6b7280', fontWeight:'600', marginBottom:'0.75rem'}}>Your shared memories:</p>
-              {answers.length === 0 && <p style={{fontSize:'0.9rem', color:'#9ca3af'}}>No answers yet. Be the first!</p>}
-              {answers.map(a => <div key={a.id} style={{background:'#f9fafb', padding:'1rem', borderRadius:'0.75rem', marginBottom:'0.75rem', borderLeft:'4px solid #f43f5e'}}>💬 {a.answer}</div>)}
-            </div>
-          </div>
-        ) : <p style={{color:'#9ca3af'}}>Click "Surprise Me" to get a question!</p>}
+      <ViewWrapper title="📥 Question Inbox" goHome={() => setCurrentView('home')}>
+        <div style={{display:'flex', flexWrap:'wrap', gap:'0.75rem', justifyContent:'center', marginBottom:'2rem'}}>
+          <input type="text" placeholder="Write your own question..." value={newQuestionText} onChange={(e) => setNewQuestionText(e.target.value)} style={{flex:'1', padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none', minWidth:'200px'}} />
+          <button onClick={askManualQuestion} style={{background:'#1f2937', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer'}}>Ask Manual</button>
+          <button onClick={askRandomQuestion} style={{background:'#f43f5e', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer'}}>Surprise Me ✨</button>
+        </div>
+        
+        <div style={{maxWidth:'600px', margin:'0 auto'}}>
+          {questions.length === 0 ? (
+            <p style={{color:'#9ca3af'}}>No questions yet. Ask the first one!</p>
+          ) : (
+            questions.map(q => (
+              <div key={q.id} style={{background:'white', padding:'1.5rem', borderRadius:'1.5rem', marginBottom:'1.5rem', boxShadow:'0 2px 8px rgba(0,0,0,0.05)'}}>
+                <div style={{fontWeight:'600', fontSize:'1.1rem', color:'#1f2937', marginBottom:'0.5rem'}}>"{q.text}"</div>
+                <div style={{fontSize:'0.8rem', color:'#9ca3af', marginBottom:'1rem'}}>{(answers[q.id] || []).length} replies • {q.category}</div>
+
+                {/* View Replies */}
+                {(answers[q.id] || []).map(a => (
+                  <div key={a.id} style={{background:'#f9fafb', padding:'0.75rem 1rem', borderRadius:'0.75rem', marginBottom:'0.5rem', borderLeft:'4px solid #f43f5e', textAlign:'left'}}>
+                    💬 {a.answer}
+                  </div>
+                ))}
+
+                {/* Reply Box */}
+                {replyingTo === q.id ? (
+                  <div style={{display:'flex', gap:'0.5rem', marginTop:'1rem'}}>
+                    <input type="text" placeholder="Write your reply..." value={replyText} onChange={(e) => setReplyText(e.target.value)} style={{flex:'1', padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none'}} />
+                    <button onClick={() => submitReply(q.id)} style={{background:'#1f2937', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer'}}>Reply</button>
+                    <button onClick={() => setReplyingTo(null)} style={{background:'none', border:'none', color:'#6b7280', cursor:'pointer'}}>Cancel</button>
+                  </div>
+                ) : (
+                  <button onClick={() => setReplyingTo(q.id)} style={{background:'none', border:'none', color:'#f43f5e', cursor:'pointer', fontWeight:'500', fontSize:'0.9rem', marginTop:'0.5rem', padding:'0'}}>Add a reply 💬</button>
+                )}
+              </div>
+            ))
+          )}
+        </div>
       </ViewWrapper>
     )
   }
@@ -230,11 +317,11 @@ function App() {
             return (
               <div key={p.id} style={{display:'flex', alignItems:'center', justifyContent:'space-between', background:'white', padding:'0.75rem 1.5rem', margin:'0.75rem 0', borderRadius:'1rem', boxShadow:'0 2px 8px rgba(0,0,0,0.05)', borderLeft: isOverdue ? '6px solid #ef4444' : p.status === 'done' ? '6px solid #22c55e' : '6px solid #f43f5e', opacity: p.status === 'done' ? '0.7' : '1'}}>
                 <span onClick={() => togglePlan(p.id, p.status)} style={{cursor:'pointer', flex:'1', textDecoration: p.status === 'done' ? 'line-through' : 'none', color: isOverdue && p.status !== 'done' ? '#ef4444' : '#1f2937'}}>
-                  <b>{p.title}</b> <span style={{fontSize:'0.85rem', color:'#6b7280'}}>({new Date(p.due_date).toLocaleDateString('en-US', { month:'short', day:'numeric' })})</span>
+                  <b>{p.title}</b> <span style={{fontSize:'0.85rem', color:'#6b7280'}}>({new Date(p.due_date).toLocaleDateString()})</span>
                 </span>
                 <div style={{display:'flex', gap:'0.75rem', alignItems:'center'}}>
                   <span style={{fontSize:'1.2rem'}}>{p.status === 'done' ? '✅' : (isOverdue ? '⚠️' : '⬜')}</span>
-                  <button onClick={() => deletePlan(p.id)} style={{background:'none', border:'none', color:'#9ca3af', cursor:'pointer', fontSize:'1rem', transition:'0.2s'}} onMouseOver={(e) => e.target.style.color='#ef4444'} onMouseOut={(e) => e.target.style.color='#9ca3af'}>🗑️</button>
+                  <button onClick={() => deletePlan(p.id)} style={{background:'none', border:'none', color:'#9ca3af', cursor:'pointer', fontSize:'1rem'}} onMouseOver={(e) => e.target.style.color='#ef4444'} onMouseOut={(e) => e.target.style.color='#9ca3af'}>🗑️</button>
                 </div>
               </div>
             )
@@ -284,9 +371,10 @@ function App() {
           </div>
         </div>
 
-        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(150px, 1fr))', gap:'1rem'}}>
+        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(140px, 1fr))', gap:'1rem'}}>
           <MenuCard icon="📸" title="Gallery" action={() => setCurrentView('gallery')} />
-          <MenuCard icon="❓" title="Questions" action={() => setCurrentView('questions')} />
+          <MenuCard icon="🗺️" title="History Tree" action={() => setCurrentView('timeline')} />
+          <MenuCard icon="📥" title="Inbox" action={() => setCurrentView('questions')} />
           <MenuCard icon="📅" title="Plans" action={() => setCurrentView('plans')} />
           <MenuCard icon="🎁" title="Gifts" action={() => setCurrentView('gifts')} />
         </div>
