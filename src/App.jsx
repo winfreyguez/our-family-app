@@ -70,55 +70,35 @@ function App() {
     else { showToast('Wrong PIN!', 'error'); setPin('') }
   }
 
-  // --- FETCH FUNCTIONS WITH ERROR LOGGING ---
   const fetchPhotos = async () => {
-    try {
-      const { data, error } = await supabase.from('photos').select('*').order('created_at', { ascending: false })
-      if (error) console.error("Photos Fetch Error:", error.message)
-      if (data) setPhotos(data)
-    } catch (e) { console.error("Photos Catch Error:", e) }
+    const { data } = await supabase.from('photos').select('*').order('created_at', { ascending: false })
+    if (data) setPhotos(data)
   }
   const fetchPlans = async () => {
-    try {
-      const { data, error } = await supabase.from('plans').select('*').order('due_date', { ascending: true })
-      if (error) console.error("Plans Fetch Error:", error.message)
-      if (data) setPlans(data)
-    } catch (e) { console.error("Plans Catch Error:", e) }
+    const { data } = await supabase.from('plans').select('*').order('due_date', { ascending: true })
+    if (data) setPlans(data)
   }
   const fetchGifts = async () => {
-    try {
-      const { data, error } = await supabase.from('gifts').select('*').order('given_at', { ascending: false })
-      if (error) console.error("Gifts Fetch Error:", error.message)
-      if (data) setGifts(data)
-    } catch (e) { console.error("Gifts Catch Error:", e) }
+    const { data } = await supabase.from('gifts').select('*').order('given_at', { ascending: false })
+    if (data) setGifts(data)
   }
   const fetchTimeline = async () => {
-    try {
-      const { data, error } = await supabase.from('timeline').select('*').order('memory_date', { ascending: false })
-      if (error) console.error("Timeline Fetch Error:", error.message)
-      if (data) setTimelines(data)
-    } catch (e) { console.error("Timeline Catch Error:", e) }
+    const { data } = await supabase.from('timeline').select('*').order('memory_date', { ascending: false })
+    if (data) setTimelines(data)
   }
   const fetchChatMessages = async () => {
-    try {
-      const { data, error } = await supabase.from('chat_messages').select('*').order('created_at', { ascending: true })
-      if (error) console.error("Chat Fetch Error:", error.message)
-      if (data) setMessages(data)
-    } catch (e) { console.error("Chat Catch Error:", e) }
+    const { data } = await supabase.from('chat_messages').select('*').order('created_at', { ascending: true })
+    if (data) setMessages(data)
   }
   const fetchQuestions = async () => {
-    try {
-      const { data, error } = await supabase.from('questions').select('*').order('created_at', { ascending: false })
-      if (error) console.error("Questions Fetch Error:", error.message)
-      if (data) {
-        setQuestions(data)
-        data.forEach(async (q) => {
-          const { data: ansData, error: ansErr } = await supabase.from('answers').select('*').eq('question_id', q.id).order('created_at', { ascending: true })
-          if (ansErr) console.error("Answers Fetch Error:", ansErr.message)
-          if (ansData) setAnswers(prev => ({ ...prev, [q.id]: ansData }))
-        })
-      }
-    } catch (e) { console.error("Questions Catch Error:", e) }
+    const { data } = await supabase.from('questions').select('*').order('created_at', { ascending: false })
+    if (data) {
+      setQuestions(data)
+      data.forEach(async (q) => {
+        const { data: ansData } = await supabase.from('answers').select('*').eq('question_id', q.id).order('created_at', { ascending: true })
+        if (ansData) setAnswers(prev => ({ ...prev, [q.id]: ansData }))
+      })
+    }
   }
 
   // --- ACTIONS ---
@@ -131,10 +111,9 @@ function App() {
       const publicUrl = `https://vnxtrumkvuvsuhhvucjm.supabase.co/storage/v1/object/public/gallery/${path}`
       await supabase.from('photos').insert({ storage_path: publicUrl })
       await fetchPhotos()
-      showToast('Photo uploaded! 💕')
+      showToast('📸 Photo uploaded!')
     } else {
-      console.error("Upload Error:", error.message)
-      showToast('Upload failed! Check bucket is Public.', 'error')
+      showToast('Upload failed! Did you run the SQL policy?', 'error')
     }
     setIsUploading(false)
   }
@@ -145,7 +124,7 @@ function App() {
   const addPlan = async () => {
     if (!planTitle || !planDate) return showToast('Fill in title & date!', 'error')
     await supabase.from('plans').insert({ title: planTitle, due_date: planDate })
-    setPlanTitle(''); setPlanDate(''); fetchPlans(); showToast(`Plan added! 📅`)
+    setPlanTitle(''); setPlanDate(''); fetchPlans(); showToast(`📅 Plan added!`)
   }
   const togglePlan = async (id, currentStatus) => {
     await supabase.from('plans').update({ status: currentStatus === 'done' ? 'pending' : 'done' }).eq('id', id)
@@ -168,25 +147,19 @@ function App() {
     const emoji = GIFT_EMOJIS[Math.floor(Math.random() * GIFT_EMOJIS.length)]
     const { error } = await supabase.from('gifts').insert({ message: `${prefix}${emoji} ${giftMsg}` })
     if (error) {
-      console.error("Gift Insert Error:", error.message)
       showToast('Failed to send gift', 'error')
     } else {
-      setGiftMsg(''); 
-      await fetchGifts(); 
-      showToast(`Gift sent! ${emoji}`)
+      setGiftMsg(''); await fetchGifts(); showToast(`🎁 Gift sent!`)
     }
   }
   const sendHeartGift = async () => {
     const emoji = '❤️'
     const { error } = await supabase.from('gifts').insert({ message: `${emoji} I Love You 💕` })
-    if (error) {
-      console.error("Heart Gift Error:", error.message)
-      showToast('Failed to send heart', 'error')
-    } else {
+    if (!error) {
       await fetchGifts();
-      showToast(`Magic gift sent! ${emoji}`)
+      showToast(`❤️ Magic gift sent!`)
       setActiveParticleGift({ message: 'I Love You', color: '#00d2ff' })
-    }
+    } else showToast('Failed to send heart', 'error')
   }
   const deleteGift = async (id) => {
     await supabase.from('gifts').delete().eq('id', id); fetchGifts(); showToast('Gift removed')
@@ -195,7 +168,7 @@ function App() {
   const addTimeline = async () => {
     if (!tlTitle || !tlDate) return showToast('Fill in title & date!', 'error')
     await supabase.from('timeline').insert({ title: tlTitle, description: tlDesc || 'A beautiful memory ✨', memory_date: tlDate })
-    setTlTitle(''); setTlDesc(''); setTlDate(''); fetchTimeline(); showToast('Memory added! 🗺️')
+    setTlTitle(''); setTlDesc(''); setTlDate(''); fetchTimeline(); showToast('🗺️ Memory added!')
   }
   const deleteTimeline = async (id) => {
     await supabase.from('timeline').delete().eq('id', id); fetchTimeline(); showToast('Memory removed')
@@ -208,20 +181,19 @@ function App() {
   }
 
   const askRandomQuestion = async () => {
-    const { data, error } = await supabase.from('questions').select('*').order('random()').limit(1).single()
-    if (error) console.error("Random Q Error:", error.message)
-    if (data) { setNewQuestionText(''); showToast('Question added!', 'success'); fetchQuestions() } 
+    const { data } = await supabase.from('questions').select('*').order('random()').limit(1).single()
+    if (data) { setNewQuestionText(''); showToast('📥 Question added!'); fetchQuestions() } 
     else showToast('Run the SQL seed!', 'error')
   }
   const askManualQuestion = async () => {
     if (!newQuestionText) return showToast('Write your own question!', 'error')
     await supabase.from('questions').insert({ text: newQuestionText, category: 'Manual' })
-    setNewQuestionText(''); showToast('Your question was sent! 📥'); fetchQuestions()
+    setNewQuestionText(''); showToast('📥 Your question was sent!'); fetchQuestions()
   }
   const submitReply = async (questionId) => {
     if (!replyText) return showToast('Write a reply!', 'error')
     await supabase.from('answers').insert({ question_id: questionId, answer: replyText })
-    setReplyText(''); setReplyingTo(null); fetchQuestions(); showToast('Reply sent! 💬')
+    setReplyText(''); setReplyingTo(null); fetchQuestions(); showToast('💬 Reply sent!')
   }
 
   // --- REALTIME SUBSCRIPTIONS ---
@@ -281,10 +253,8 @@ function App() {
     }
   }, [currentView])
 
-  // --- DAYS ---
   const daysTogether = Math.floor((new Date() - START_DATE) / (1000 * 60 * 60 * 24))
 
-  // --- LOGIN ---
   if (!isLoggedIn) {
     return (
       <div style={{display:'flex', justifyContent:'center', alignItems:'center', height:'100vh', background:'#fff0f5', fontFamily:'"Inter", sans-serif'}}>
@@ -299,7 +269,6 @@ function App() {
     )
   }
 
-  // --- GIFT ANIMATION ---
   if (activeParticleGift) {
     return <ParticleGift message={activeParticleGift.message} color={activeParticleGift.color} onClose={() => setActiveParticleGift(null)} />
   }
@@ -309,13 +278,13 @@ function App() {
     return (
       <ViewWrapper title="📸 Shared Gallery" goHome={() => setCurrentView('home')}>
         <div style={{marginBottom:'1.5rem'}}>
-          <input type="file" accept="image/*" onChange={uploadPhoto} disabled={isUploading} style={{display:'none'}} id="upload" />
-          <label htmlFor="upload" style={{display:'inline-block', background:'#f43f5e', color:'white', padding:'0.75rem 2rem', borderRadius:'2rem', cursor:'pointer', fontWeight:'600', fontSize:'0.95rem', transition:'0.2s', boxShadow:'0 4px 8px rgba(244, 63, 94, 0.2)'}}>{isUploading ? 'Uploading...' : 'Add Memory 🖼️'}</label>
+          <input type="file" accept="image/*" capture="environment" onChange={uploadPhoto} disabled={isUploading} style={{display:'none'}} id="upload" />
+          <label htmlFor="upload" style={{display:'inline-block', background:'#f43f5e', color:'white', padding:'0.75rem 2rem', borderRadius:'2rem', cursor:'pointer', fontWeight:'600', fontSize:'0.95rem', transition:'0.2s', boxShadow:'0 4px 8px rgba(244, 63, 94, 0.2)'}}>{isUploading ? 'Uploading...' : 'Take / Upload Photo 📸'}</label>
         </div>
         {photos.length === 0 ? (
           <div style={{padding:'3rem 1rem', background:'white', borderRadius:'1rem', color:'#9ca3af', border:'2px dashed #e5e7eb'}}>
             <div style={{fontSize:'3rem'}}>🖼️</div>
-            <p>No memories yet. Ensure bucket is Public.</p>
+            <p>No memories yet. Take a photo together!</p>
           </div>
         ) : (
           <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:'1.5rem'}}>
@@ -467,7 +436,7 @@ function App() {
         <div style={{maxWidth:'600px', margin:'0 auto'}}>
           {gifts.length === 0 ? <div style={{padding:'2rem', color:'#9ca3af', fontStyle:'italic'}}>Send your first gift!</div> : (
             gifts.map(g => (
-              <div key={g.id} style={{margin:'0.75rem 0', transition:'0.3s'}}>
+              <div key={g.id} style={{margin:'0.75rem 0', transition:'0.3s', animation: 'giftFadeIn 0.5s ease-out'}}>
                 <div style={{background: randomColor(), padding:'1rem 1.5rem', borderRadius:'1.5rem', borderBottomLeftRadius:'0.5rem', position:'relative', boxShadow:'0 2px 8px rgba(0,0,0,0.05)', textAlign:'left'}}>
                   <div style={{fontSize:'1.1rem', fontWeight:'500', marginBottom:'0.25rem'}}>{g.message}</div>
                   <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'0.75rem', color:'#6b7280'}}>
@@ -479,6 +448,12 @@ function App() {
             ))
           )}
         </div>
+        <style>{`
+          @keyframes giftFadeIn {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+          }
+        `}</style>
       </ViewWrapper>
     )
   }
@@ -487,7 +462,7 @@ function App() {
   return (
     <div style={{fontFamily:'"Inter", sans-serif', minHeight:'100vh', background:'#fff0f5', padding:'2rem 1rem'}}>
       <div style={{maxWidth:'800px', margin:'0 auto'}}>
-        <div style={{background:'white', borderRadius:'2rem', padding:'3rem 2rem', boxShadow:'0 20px 40px rgba(244, 63, 94, 0.1)', textAlign:'center', marginBottom:'2rem'}}>
+        <div style={{background:'rgba(255, 255, 255, 0.7)', backdropFilter:'blur(10px)', borderRadius:'2rem', padding:'3rem 2rem', boxShadow:'0 20px 40px rgba(244, 63, 94, 0.1)', textAlign:'center', marginBottom:'2rem'}}>
           <div style={{fontSize:'4rem', marginBottom:'0.5rem'}}>💕</div>
           <h1 style={{color:'#f43f5e', fontSize:'2.2rem', fontWeight:'700', marginBottom:'0.5rem'}}>Family Hub</h1>
           <div style={{fontSize:'0.95rem', color:'#6b7280'}}><span style={{fontWeight:'600', color:'#f43f5e'}}>{daysTogether}</span> beautiful days together 💫</div>
