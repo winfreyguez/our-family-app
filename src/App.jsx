@@ -35,7 +35,7 @@ function App() {
   const [pin, setPin] = useState('')
   const [currentView, setCurrentView] = useState('home')
   const [toast, setToast] = useState(null)
-  const [loading, setLoading] = useState(false) // Specific loading state
+  const [loading, setLoading] = useState(false)
   
   // --- DATA STATE ---
   const [photos, setPhotos] = useState([])
@@ -197,7 +197,10 @@ function App() {
           <div style={{padding:'2rem', fontSize:'2rem'}}>💭</div>
         ) : currentQuestion ? (
           <div style={{background:'white', padding:'2rem', borderRadius:'1.5rem', boxShadow:'0 8px 20px rgba(0,0,0,0.05)', maxWidth:'600px', margin:'0 auto'}}>
-            <p style={{fontSize:'1.2rem', fontWeight:'600', color:'#1f2937', marginBottom:'1.5rem', lineHeight:'1.6'}> {"\""}{currentQuestion.text}{"\""} </p>
+            {/* BULLETPROOF SPAN METHOD - PARSER WILL NEVER BREAK HERE */}
+            <p style={{fontSize:'1.2rem', fontWeight:'600', color:'#1f2937', marginBottom:'1.5rem', lineHeight:'1.6'}}>
+              <span>"</span>{currentQuestion.text}<span>"</span>
+            </p>
             <div style={{display:'flex', gap:'0.5rem', marginBottom:'1.5rem'}}>
               <input type="text" placeholder="Write your memory..." value={answerText} onChange={(e) => setAnswerText(e.target.value)} style={{flex:'1', padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none'}} />
               <button onClick={submitAnswer} style={{background:'#1f2937', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', cursor:'pointer', fontWeight:'600'}}>Reply</button>
