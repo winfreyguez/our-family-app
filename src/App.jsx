@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
-import ParticleGift from './ParticleGift' // Import our new animation
+import ParticleGift from './ParticleGift'
 
 // --- APP CONFIG ---
-const START_DATE = new Date('2024-01-01') // Change this to your actual anniversary!
+const START_DATE = new Date('2024-01-01') 
 const CORRECT_PIN = '1212'
 const GIFT_EMOJIS = ['❤️', '🌹', '🌟', '💌', '🎉', '💝', '🌺', '✨']
 
@@ -44,25 +44,26 @@ function App() {
   const [gifts, setGifts] = useState([])
   const [timelines, setTimelines] = useState([])
   const [questions, setQuestions] = useState([])
-  const [answers, setAnswers] = useState({}) // Object keyed by question ID
+  const [answers, setAnswers] = useState({})
+  const [messages, setMessages] = useState([]) // Chat messages
   
   // --- INPUT STATE ---
   const [planTitle, setPlanTitle] = useState('')
   const [planDate, setPlanDate] = useState('')
   const [giftMsg, setGiftMsg] = useState('')
   const [isUploading, setIsUploading] = useState(false)
-  
-  // Timeline Inputs
   const [tlTitle, setTlTitle] = useState('')
   const [tlDesc, setTlDesc] = useState('')
   const [tlDate, setTlDate] = useState('')
-  
-  // Question Inputs
   const [newQuestionText, setNewQuestionText] = useState('')
   const [replyingTo, setReplyingTo] = useState(null)
   const [replyText, setReplyText] = useState('')
+  
+  // --- CHAT STATE ---
+  const [myName, setMyName] = useState('You') // Default sender name
+  const [chatInput, setChatInput] = useState('')
 
-  // Gift Animation State
+  // --- GIFT ANIMATION ---
   const [activeParticleGift, setActiveParticleGift] = useState(null)
 
   // --- TOAST ---
@@ -95,12 +96,14 @@ function App() {
     const { data } = await supabase.from('timeline').select('*').order('memory_date', { ascending: false })
     if (data) setTimelines(data)
   }
-  
+  const fetchChatMessages = async () => {
+    const { data } = await supabase.from('chat_messages').select('*').order('created_at', { ascending: true })
+    if (data) setMessages(data)
+  }
   const fetchQuestions = async () => {
     const { data } = await supabase.from('questions').select('*').order('created_at', { ascending: false })
     if (data) {
       setQuestions(data)
-      // Fetch answers for all questions
       data.forEach(async (q) => {
         const { data: ansData } = await supabase.from('answers').select('*').eq('question_id', q.id).order('created_at', { ascending: true })
         if (ansData) setAnswers(prev => ({ ...prev, [q.id]: ansData }))
@@ -115,10 +118,11 @@ function App() {
     const path = `family_${Date.now()}.jpg`
     const { error } = await supabase.storage.from('gallery').upload(path, file)
     if (!error) {
-      const { data: urlData } = supabase.storage.from('gallery').getPublicUrl(path)
-      await supabase.from('photos').insert({ storage_path: urlData.publicUrl })
+      // FIX: Manually construct the URL to guarantee it works
+      const publicUrl = `https://vnxtrumkvuvsuhhvucjm.supabase.co/storage/v1/object/public/gallery/${path}`
+      await supabase.from('photos').insert({ storage_path: publicUrl })
       fetchPhotos(); showToast('Photo uploaded! 💕')
-    } else showToast('Upload failed! Check bucket is public.', 'error')
+    } else showToast('Upload failed!', 'error')
     setIsUploading(false)
   }
   const deletePhoto = async (id) => {
@@ -138,22 +142,18 @@ function App() {
     await supabase.from('plans').delete().eq('id', id); fetchPlans(); showToast('Plan deleted')
   }
 
-  // --- CREATIVE GIFTS PATTERN ---
   const sendGift = async () => {
     if (!giftMsg) return showToast('Write a message!', 'error')
     const emoji = GIFT_EMOJIS[Math.floor(Math.random() * GIFT_EMOJIS.length)]
     await supabase.from('gifts').insert({ message: `${emoji} ${giftMsg}` })
     setGiftMsg(''); fetchGifts(); showToast(`Gift sent! ${emoji}`)
   }
-  
-  // Send the "I Love You" Particle Heart Gift
   const sendHeartGift = async () => {
     const emoji = '❤️'
     await supabase.from('gifts').insert({ message: `${emoji} I Love You 💕` })
     fetchGifts(); showToast(`Magic gift sent! ${emoji}`)
     setActiveParticleGift({ message: 'I Love You', color: '#00d2ff' })
   }
-
   const deleteGift = async (id) => {
     await supabase.from('gifts').delete().eq('id', id); fetchGifts(); showToast('Gift removed')
   }
@@ -167,31 +167,27 @@ function App() {
     await supabase.from('timeline').delete().eq('id', id); fetchTimeline(); showToast('Memory removed')
   }
 
-  // --- QUESTION INBOX ACTIONS ---
+  // --- WHATSAPP CHAT ACTIONS ---
+  const sendChatMessage = async () => {
+    if (!chatInput.trim()) return
+    await supabase.from('chat_messages').insert({ sender_name: myName, message: chatInput })
+    setChatInput('')
+  }
+
   const askRandomQuestion = async () => {
     const { data } = await supabase.from('questions').select('*').order('random()').limit(1).single()
-    if (data) {
-      setNewQuestionText('')
-      showToast(`Question added to inbox!`, 'success')
-      fetchQuestions()
-    } else {
-      showToast('Run the SQL seed to add questions!', 'error')
-    }
+    if (data) { setNewQuestionText(''); showToast('Question added!', 'success'); fetchQuestions() } 
+    else showToast('Run the SQL seed!', 'error')
   }
-  
   const askManualQuestion = async () => {
     if (!newQuestionText) return showToast('Write your own question!', 'error')
     await supabase.from('questions').insert({ text: newQuestionText, category: 'Manual' })
-    setNewQuestionText('')
-    showToast('Your question was sent to the inbox! 📥')
-    fetchQuestions()
+    setNewQuestionText(''); showToast('Your question was sent! 📥'); fetchQuestions()
   }
-
   const submitReply = async (questionId) => {
     if (!replyText) return showToast('Write a reply!', 'error')
     await supabase.from('answers').insert({ question_id: questionId, answer: replyText })
-    setReplyText(''); setReplyingTo(null)
-    fetchQuestions(); showToast('Reply sent! 💬')
+    setReplyText(''); setReplyingTo(null); fetchQuestions(); showToast('Reply sent! 💬')
   }
 
   // --- EFFECTS ---
@@ -200,6 +196,19 @@ function App() {
   useEffect(() => { if (currentView === 'gifts') fetchGifts() }, [currentView])
   useEffect(() => { if (currentView === 'timeline') fetchTimeline() }, [currentView])
   useEffect(() => { if (currentView === 'questions') fetchQuestions() }, [currentView])
+
+  // Realtime Chat Effect
+  useEffect(() => {
+    if (currentView === 'chat') {
+      fetchChatMessages()
+      const channel = supabase.channel('chat_messages')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, payload => {
+          setMessages(prev => [...prev, payload.new])
+        })
+        .subscribe()
+      return () => { supabase.removeChannel(channel) }
+    }
+  }, [currentView])
 
   // --- DAYS ---
   const daysTogether = Math.floor((new Date() - START_DATE) / (1000 * 60 * 60 * 24))
@@ -219,15 +228,9 @@ function App() {
     )
   }
 
-  // --- GIFT ANIMATION OVERLAY ---
+  // --- GIFT ANIMATION ---
   if (activeParticleGift) {
-    return (
-      <ParticleGift 
-        message={activeParticleGift.message} 
-        color={activeParticleGift.color} 
-        onClose={() => setActiveParticleGift(null)} 
-      />
-    )
+    return <ParticleGift message={activeParticleGift.message} color={activeParticleGift.color} onClose={() => setActiveParticleGift(null)} />
   }
 
   // --- VIEWS ---
@@ -242,7 +245,7 @@ function App() {
         {photos.length === 0 ? (
           <div style={{padding:'3rem 1rem', background:'white', borderRadius:'1rem', color:'#9ca3af', border:'2px dashed #e5e7eb'}}>
             <div style={{fontSize:'3rem'}}>🖼️</div>
-            <p>No memories yet. Upload your first photo together!</p>
+            <p>No memories yet. Upload your first photo together! (Don't forget to refresh)</p>
           </div>
         ) : (
           <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:'1.5rem'}}>
@@ -285,6 +288,47 @@ function App() {
     )
   }
 
+  if (currentView === 'chat') {
+    return (
+      <div style={{fontFamily:'"Inter", sans-serif', height:'100vh', background:'#f0f2f5', display:'flex', flexDirection:'column', overflow:'hidden'}}>
+        {/* Chat Header */}
+        <div style={{background:'#f43f5e', color:'white', padding:'1rem 1.5rem', display:'flex', justifyContent:'space-between', alignItems:'center', boxShadow:'0 2px 4px rgba(0,0,0,0.1)'}}>
+          <button onClick={() => setCurrentView('home')} style={{background:'none', border:'none', color:'white', fontSize:'1.2rem', cursor:'pointer'}}>←</button>
+          <div style={{fontWeight:'700', fontSize:'1.1rem'}}>💬 Family Chat</div>
+          <div style={{width:'24px'}}></div>
+        </div>
+
+        {/* Sender Name Input */}
+        <div style={{padding:'0.75rem 1rem', background:'white', borderBottom:'1px solid #e5e7eb', textAlign:'center', fontSize:'0.9rem'}}>
+          <span style={{color:'#4b5563'}}>Your name: </span>
+          <input type="text" value={myName} onChange={(e) => setMyName(e.target.value)} style={{padding:'0.25rem 0.5rem', border:'1px solid #d1d5db', borderRadius:'0.5rem', outline:'none'}} />
+        </div>
+
+        {/* Messages Container */}
+        <div style={{flex:1, overflowY:'auto', padding:'1rem 1.5rem', display:'flex', flexDirection:'column', gap:'0.75rem'}}>
+          {messages.map((msg) => {
+            const isMe = msg.sender_name === myName;
+            return (
+              <div key={msg.id} style={{display:'flex', flexDirection:'column', alignItems: isMe ? 'flex-end' : 'flex-start'}}>
+                <div style={{maxWidth:'75%', background: isMe ? '#f43f5e' : '#ffffff', color: isMe ? 'white' : '#1f2937', padding:'0.75rem 1rem', borderRadius: isMe ? '1rem 1rem 0 1rem' : '1rem 1rem 1rem 0', boxShadow:'0 1px 2px rgba(0,0,0,0.05)'}}>
+                  {isMe ? null : <div style={{fontSize:'0.75rem', fontWeight:'600', marginBottom:'0.2rem', color:'#f43f5e'}}>{msg.sender_name}</div>}
+                  <div>{msg.message}</div>
+                </div>
+                <div style={{fontSize:'0.7rem', color:'#9ca3af', marginTop:'0.25rem'}}>{timeAgo(msg.created_at)}</div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Chat Input */}
+        <div style={{background:'white', padding:'0.75rem 1rem', display:'flex', gap:'0.75rem', borderTop:'1px solid #e5e7eb'}}>
+          <input type="text" placeholder="Type a message..." value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendChatMessage()} style={{flex:1, padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'2rem', outline:'none'}} />
+          <button onClick={sendChatMessage} style={{background:'#f43f5e', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'2rem', fontWeight:'600', cursor:'pointer'}}>Send</button>
+        </div>
+      </div>
+    )
+  }
+
   if (currentView === 'questions') {
     return (
       <ViewWrapper title="📥 Question Inbox" goHome={() => setCurrentView('home')}>
@@ -293,33 +337,20 @@ function App() {
           <button onClick={askManualQuestion} style={{background:'#1f2937', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer'}}>Ask Manual</button>
           <button onClick={askRandomQuestion} style={{background:'#f43f5e', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer'}}>Surprise Me ✨</button>
         </div>
-        
         <div style={{maxWidth:'600px', margin:'0 auto'}}>
-          {questions.length === 0 ? (
-            <p style={{color:'#9ca3af'}}>No questions yet. Ask the first one!</p>
-          ) : (
+          {questions.length === 0 ? <p style={{color:'#9ca3af'}}>No questions yet. Ask the first one!</p> : (
             questions.map(q => (
               <div key={q.id} style={{background:'white', padding:'1.5rem', borderRadius:'1.5rem', marginBottom:'1.5rem', boxShadow:'0 2px 8px rgba(0,0,0,0.05)'}}>
                 <div style={{fontWeight:'600', fontSize:'1.1rem', color:'#1f2937', marginBottom:'0.5rem'}}>"{q.text}"</div>
-                <div style={{fontSize:'0.8rem', color:'#9ca3af', marginBottom:'1rem'}}>{(answers[q.id] || []).length} replies • {q.category}</div>
-
-                {/* View Replies */}
-                {(answers[q.id] || []).map(a => (
-                  <div key={a.id} style={{background:'#f9fafb', padding:'0.75rem 1rem', borderRadius:'0.75rem', marginBottom:'0.5rem', borderLeft:'4px solid #f43f5e', textAlign:'left'}}>
-                    💬 {a.answer}
-                  </div>
-                ))}
-
-                {/* Reply Box */}
+                <div style={{fontSize:'0.8rem', color:'#9ca3af', marginBottom:'1rem'}}>{(answers[q.id] || []).length} replies</div>
+                {(answers[q.id] || []).map(a => <div key={a.id} style={{background:'#f9fafb', padding:'0.75rem 1rem', borderRadius:'0.75rem', marginBottom:'0.5rem', borderLeft:'4px solid #f43f5e', textAlign:'left'}}>💬 {a.answer}</div>)}
                 {replyingTo === q.id ? (
                   <div style={{display:'flex', gap:'0.5rem', marginTop:'1rem'}}>
                     <input type="text" placeholder="Write your reply..." value={replyText} onChange={(e) => setReplyText(e.target.value)} style={{flex:'1', padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none'}} />
                     <button onClick={() => submitReply(q.id)} style={{background:'#1f2937', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer'}}>Reply</button>
                     <button onClick={() => setReplyingTo(null)} style={{background:'none', border:'none', color:'#6b7280', cursor:'pointer'}}>Cancel</button>
                   </div>
-                ) : (
-                  <button onClick={() => setReplyingTo(q.id)} style={{background:'none', border:'none', color:'#f43f5e', cursor:'pointer', fontWeight:'500', fontSize:'0.9rem', marginTop:'0.5rem', padding:'0'}}>Add a reply 💬</button>
-                )}
+                ) : <button onClick={() => setReplyingTo(q.id)} style={{background:'none', border:'none', color:'#f43f5e', cursor:'pointer', fontWeight:'500', fontSize:'0.9rem', marginTop:'0.5rem', padding:'0'}}>Add a reply 💬</button>}
               </div>
             ))
           )}
@@ -341,9 +372,7 @@ function App() {
             const isOverdue = new Date(p.due_date) < new Date() && p.status !== 'done'
             return (
               <div key={p.id} style={{display:'flex', alignItems:'center', justifyContent:'space-between', background:'white', padding:'0.75rem 1.5rem', margin:'0.75rem 0', borderRadius:'1rem', boxShadow:'0 2px 8px rgba(0,0,0,0.05)', borderLeft: isOverdue ? '6px solid #ef4444' : p.status === 'done' ? '6px solid #22c55e' : '6px solid #f43f5e', opacity: p.status === 'done' ? '0.7' : '1'}}>
-                <span onClick={() => togglePlan(p.id, p.status)} style={{cursor:'pointer', flex:'1', textDecoration: p.status === 'done' ? 'line-through' : 'none', color: isOverdue && p.status !== 'done' ? '#ef4444' : '#1f2937'}}>
-                  <b>{p.title}</b> <span style={{fontSize:'0.85rem', color:'#6b7280'}}>({new Date(p.due_date).toLocaleDateString()})</span>
-                </span>
+                <span onClick={() => togglePlan(p.id, p.status)} style={{cursor:'pointer', flex:'1', textDecoration: p.status === 'done' ? 'line-through' : 'none', color: isOverdue && p.status !== 'done' ? '#ef4444' : '#1f2937'}}><b>{p.title}</b> <span style={{fontSize:'0.85rem', color:'#6b7280'}}>({new Date(p.due_date).toLocaleDateString()})</span></span>
                 <div style={{display:'flex', gap:'0.75rem', alignItems:'center'}}>
                   <span style={{fontSize:'1.2rem'}}>{p.status === 'done' ? '✅' : (isOverdue ? '⚠️' : '⬜')}</span>
                   <button onClick={() => deletePlan(p.id)} style={{background:'none', border:'none', color:'#9ca3af', cursor:'pointer', fontSize:'1rem'}} onMouseOver={(e) => e.target.style.color='#ef4444'} onMouseOut={(e) => e.target.style.color='#9ca3af'}>🗑️</button>
@@ -365,9 +394,7 @@ function App() {
           <button onClick={sendHeartGift} style={{background:'#00d2ff', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer', boxShadow:'0 4px 12px rgba(0,210,255,0.4)'}}>Send ❤️ I Love You</button>
         </div>
         <div style={{maxWidth:'600px', margin:'0 auto'}}>
-          {gifts.length === 0 ? (
-            <div style={{padding:'2rem', color:'#9ca3af', fontStyle:'italic'}}>Send your first gift to start the love note thread!</div>
-          ) : (
+          {gifts.length === 0 ? <div style={{padding:'2rem', color:'#9ca3af', fontStyle:'italic'}}>Send your first gift!</div> : (
             gifts.map(g => (
               <div key={g.id} style={{margin:'0.75rem 0', transition:'0.3s'}}>
                 <div style={{background: randomColor(), padding:'1rem 1.5rem', borderRadius:'1.5rem', borderBottomLeftRadius:'0.5rem', position:'relative', boxShadow:'0 2px 8px rgba(0,0,0,0.05)', textAlign:'left'}}>
@@ -392,27 +419,20 @@ function App() {
         <div style={{background:'white', borderRadius:'2rem', padding:'3rem 2rem', boxShadow:'0 20px 40px rgba(244, 63, 94, 0.1)', textAlign:'center', marginBottom:'2rem'}}>
           <div style={{fontSize:'4rem', marginBottom:'0.5rem'}}>💕</div>
           <h1 style={{color:'#f43f5e', fontSize:'2.2rem', fontWeight:'700', marginBottom:'0.5rem'}}>Family Hub</h1>
-          <div style={{fontSize:'0.95rem', color:'#6b7280'}}>
-            <span style={{fontWeight:'600', color:'#f43f5e'}}>{daysTogether}</span> beautiful days together 💫
-          </div>
+          <div style={{fontSize:'0.95rem', color:'#6b7280'}}><span style={{fontWeight:'600', color:'#f43f5e'}}>{daysTogether}</span> beautiful days together 💫</div>
         </div>
-
         <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(140px, 1fr))', gap:'1rem'}}>
           <MenuCard icon="📸" title="Gallery" action={() => setCurrentView('gallery')} />
           <MenuCard icon="🗺️" title="History Tree" action={() => setCurrentView('timeline')} />
           <MenuCard icon="📥" title="Inbox" action={() => setCurrentView('questions')} />
+          <MenuCard icon="💬" title="Chat" action={() => setCurrentView('chat')} />
           <MenuCard icon="📅" title="Plans" action={() => setCurrentView('plans')} />
           <MenuCard icon="🎁" title="Gifts" action={() => setCurrentView('gifts')} />
         </div>
-        
         <button onClick={() => setIsLoggedIn(false)} style={{display:'block', margin:'3rem auto 0', background:'#ef4444', color:'white', padding:'0.75rem 2.5rem', border:'none', borderRadius:'2rem', fontSize:'0.95rem', cursor:'pointer', fontWeight:'500'}}>Log Out</button>
       </div>
-
-      {/* TOAST NOTIFICATION */}
       {toast && (
-        <div style={{position:'fixed', bottom:'2rem', left:'50%', transform:'translateX(-50%)', background: toast.type === 'error' ? '#ef4444' : '#22c55e', color:'white', padding:'1rem 2rem', borderRadius:'2rem', boxShadow:'0 10px 25px rgba(0,0,0,0.15)', fontWeight:'500', zIndex:1000, animation:'fadeIn 0.3s'}}>
-          {toast.message}
-        </div>
+        <div style={{position:'fixed', bottom:'2rem', left:'50%', transform:'translateX(-50%)', background: toast.type === 'error' ? '#ef4444' : '#22c55e', color:'white', padding:'1rem 2rem', borderRadius:'2rem', boxShadow:'0 10px 25px rgba(0,0,0,0.15)', fontWeight:'500', zIndex:1000, animation:'fadeIn 0.3s'}}>{toast.message}</div>
       )}
     </div>
   )
