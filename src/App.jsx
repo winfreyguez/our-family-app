@@ -70,36 +70,55 @@ function App() {
     else { showToast('Wrong PIN!', 'error'); setPin('') }
   }
 
-  // --- FETCHING ---
+  // --- FETCH FUNCTIONS WITH ERROR LOGGING ---
   const fetchPhotos = async () => {
-    const { data } = await supabase.from('photos').select('*').order('created_at', { ascending: false })
-    if (data) setPhotos(data)
+    try {
+      const { data, error } = await supabase.from('photos').select('*').order('created_at', { ascending: false })
+      if (error) console.error("Photos Fetch Error:", error.message)
+      if (data) setPhotos(data)
+    } catch (e) { console.error("Photos Catch Error:", e) }
   }
   const fetchPlans = async () => {
-    const { data } = await supabase.from('plans').select('*').order('due_date', { ascending: true })
-    if (data) setPlans(data)
+    try {
+      const { data, error } = await supabase.from('plans').select('*').order('due_date', { ascending: true })
+      if (error) console.error("Plans Fetch Error:", error.message)
+      if (data) setPlans(data)
+    } catch (e) { console.error("Plans Catch Error:", e) }
   }
   const fetchGifts = async () => {
-    const { data } = await supabase.from('gifts').select('*').order('given_at', { ascending: false })
-    if (data) setGifts(data)
+    try {
+      const { data, error } = await supabase.from('gifts').select('*').order('given_at', { ascending: false })
+      if (error) console.error("Gifts Fetch Error:", error.message)
+      if (data) setGifts(data)
+    } catch (e) { console.error("Gifts Catch Error:", e) }
   }
   const fetchTimeline = async () => {
-    const { data } = await supabase.from('timeline').select('*').order('memory_date', { ascending: false })
-    if (data) setTimelines(data)
+    try {
+      const { data, error } = await supabase.from('timeline').select('*').order('memory_date', { ascending: false })
+      if (error) console.error("Timeline Fetch Error:", error.message)
+      if (data) setTimelines(data)
+    } catch (e) { console.error("Timeline Catch Error:", e) }
   }
   const fetchChatMessages = async () => {
-    const { data } = await supabase.from('chat_messages').select('*').order('created_at', { ascending: true })
-    if (data) setMessages(data)
+    try {
+      const { data, error } = await supabase.from('chat_messages').select('*').order('created_at', { ascending: true })
+      if (error) console.error("Chat Fetch Error:", error.message)
+      if (data) setMessages(data)
+    } catch (e) { console.error("Chat Catch Error:", e) }
   }
   const fetchQuestions = async () => {
-    const { data } = await supabase.from('questions').select('*').order('created_at', { ascending: false })
-    if (data) {
-      setQuestions(data)
-      data.forEach(async (q) => {
-        const { data: ansData } = await supabase.from('answers').select('*').eq('question_id', q.id).order('created_at', { ascending: true })
-        if (ansData) setAnswers(prev => ({ ...prev, [q.id]: ansData }))
-      })
-    }
+    try {
+      const { data, error } = await supabase.from('questions').select('*').order('created_at', { ascending: false })
+      if (error) console.error("Questions Fetch Error:", error.message)
+      if (data) {
+        setQuestions(data)
+        data.forEach(async (q) => {
+          const { data: ansData, error: ansErr } = await supabase.from('answers').select('*').eq('question_id', q.id).order('created_at', { ascending: true })
+          if (ansErr) console.error("Answers Fetch Error:", ansErr.message)
+          if (ansData) setAnswers(prev => ({ ...prev, [q.id]: ansData }))
+        })
+      }
+    } catch (e) { console.error("Questions Catch Error:", e) }
   }
 
   // --- ACTIONS ---
@@ -109,13 +128,12 @@ function App() {
     const path = `family_${Date.now()}.jpg`
     const { error } = await supabase.storage.from('gallery').upload(path, file)
     if (!error) {
-      // GUARANTEED PUBLIC URL FORMAT
       const publicUrl = `https://vnxtrumkvuvsuhhvucjm.supabase.co/storage/v1/object/public/gallery/${path}`
       await supabase.from('photos').insert({ storage_path: publicUrl })
-      await fetchPhotos(); // Force UI update
+      await fetchPhotos()
       showToast('Photo uploaded! 💕')
     } else {
-      console.error(error);
+      console.error("Upload Error:", error.message)
       showToast('Upload failed! Check bucket is Public.', 'error')
     }
     setIsUploading(false)
@@ -148,17 +166,27 @@ function App() {
       prefix = `${giftEmojis[giftType] || '🎁'} ${giftType}: `;
     }
     const emoji = GIFT_EMOJIS[Math.floor(Math.random() * GIFT_EMOJIS.length)]
-    await supabase.from('gifts').insert({ message: `${prefix}${emoji} ${giftMsg}` })
-    setGiftMsg(''); 
-    await fetchGifts(); // Force instant update without waiting for Realtime
-    showToast(`Gift sent! ${emoji}`)
+    const { error } = await supabase.from('gifts').insert({ message: `${prefix}${emoji} ${giftMsg}` })
+    if (error) {
+      console.error("Gift Insert Error:", error.message)
+      showToast('Failed to send gift', 'error')
+    } else {
+      setGiftMsg(''); 
+      await fetchGifts(); 
+      showToast(`Gift sent! ${emoji}`)
+    }
   }
   const sendHeartGift = async () => {
     const emoji = '❤️'
-    await supabase.from('gifts').insert({ message: `${emoji} I Love You 💕` })
-    await fetchGifts();
-    showToast(`Magic gift sent! ${emoji}`)
-    setActiveParticleGift({ message: 'I Love You', color: '#00d2ff' })
+    const { error } = await supabase.from('gifts').insert({ message: `${emoji} I Love You 💕` })
+    if (error) {
+      console.error("Heart Gift Error:", error.message)
+      showToast('Failed to send heart', 'error')
+    } else {
+      await fetchGifts();
+      showToast(`Magic gift sent! ${emoji}`)
+      setActiveParticleGift({ message: 'I Love You', color: '#00d2ff' })
+    }
   }
   const deleteGift = async (id) => {
     await supabase.from('gifts').delete().eq('id', id); fetchGifts(); showToast('Gift removed')
@@ -180,7 +208,8 @@ function App() {
   }
 
   const askRandomQuestion = async () => {
-    const { data } = await supabase.from('questions').select('*').order('random()').limit(1).single()
+    const { data, error } = await supabase.from('questions').select('*').order('random()').limit(1).single()
+    if (error) console.error("Random Q Error:", error.message)
     if (data) { setNewQuestionText(''); showToast('Question added!', 'success'); fetchQuestions() } 
     else showToast('Run the SQL seed!', 'error')
   }
@@ -196,7 +225,6 @@ function App() {
   }
 
   // --- REALTIME SUBSCRIPTIONS ---
-  // Chat
   useEffect(() => {
     if (currentView === 'chat') {
       fetchChatMessages()
@@ -207,7 +235,6 @@ function App() {
     }
   }, [currentView])
 
-  // Gallery
   useEffect(() => {
     if (currentView === 'gallery') {
       fetchPhotos()
@@ -218,7 +245,6 @@ function App() {
     }
   }, [currentView])
 
-  // Gifts
   useEffect(() => {
     if (currentView === 'gifts') {
       fetchGifts()
@@ -229,7 +255,6 @@ function App() {
     }
   }, [currentView])
 
-  // Timeline
   useEffect(() => {
     if (currentView === 'timeline') {
       fetchTimeline()
@@ -240,7 +265,6 @@ function App() {
     }
   }, [currentView])
 
-  // Questions Inbox
   useEffect(() => {
     if (currentView === 'questions') {
       fetchQuestions()
