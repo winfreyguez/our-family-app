@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
 import ParticleGift from './ParticleGift'
 
-const START_DATE = new Date('2024-01-01') // Change to your actual anniversary!
+const START_DATE = new Date('2024-01-01')
 const CORRECT_PIN = '1212'
 const GIFT_EMOJIS = ['❤️', '🌹', '🌟', '💌', '🎉', '💝', '🌺', '✨']
 
@@ -109,10 +109,15 @@ function App() {
     const path = `family_${Date.now()}.jpg`
     const { error } = await supabase.storage.from('gallery').upload(path, file)
     if (!error) {
+      // GUARANTEED PUBLIC URL FORMAT
       const publicUrl = `https://vnxtrumkvuvsuhhvucjm.supabase.co/storage/v1/object/public/gallery/${path}`
       await supabase.from('photos').insert({ storage_path: publicUrl })
-      fetchPhotos(); showToast('Photo uploaded! 💕')
-    } else showToast('Upload failed!', 'error')
+      await fetchPhotos(); // Force UI update
+      showToast('Photo uploaded! 💕')
+    } else {
+      console.error(error);
+      showToast('Upload failed! Check bucket is Public.', 'error')
+    }
     setIsUploading(false)
   }
   const deletePhoto = async (id) => {
@@ -137,22 +142,22 @@ function App() {
     let prefix = '';
     if (giftType !== 'Custom Message') {
       const giftEmojis = {
-        'Jewelry': '💍',
-        'Subscription Box': '📦',
-        'Luxury Weighted Blanket': '🛏️',
-        'Spa Package': '🧖',
-        'Digital Gift Card': '💳'
+        'Jewelry': '💍', 'Subscription Box': '📦', 'Luxury Weighted Blanket': '🛏️',
+        'Spa Package': '🧖', 'Digital Gift Card': '💳'
       };
       prefix = `${giftEmojis[giftType] || '🎁'} ${giftType}: `;
     }
     const emoji = GIFT_EMOJIS[Math.floor(Math.random() * GIFT_EMOJIS.length)]
     await supabase.from('gifts').insert({ message: `${prefix}${emoji} ${giftMsg}` })
-    setGiftMsg(''); fetchGifts(); showToast(`Gift sent! ${emoji}`)
+    setGiftMsg(''); 
+    await fetchGifts(); // Force instant update without waiting for Realtime
+    showToast(`Gift sent! ${emoji}`)
   }
   const sendHeartGift = async () => {
     const emoji = '❤️'
     await supabase.from('gifts').insert({ message: `${emoji} I Love You 💕` })
-    fetchGifts(); showToast(`Magic gift sent! ${emoji}`)
+    await fetchGifts();
+    showToast(`Magic gift sent! ${emoji}`)
     setActiveParticleGift({ message: 'I Love You', color: '#00d2ff' })
   }
   const deleteGift = async (id) => {
@@ -190,8 +195,8 @@ function App() {
     setReplyText(''); setReplyingTo(null); fetchQuestions(); showToast('Reply sent! 💬')
   }
 
-  // --- REALTIME SUBSCRIPTIONS FOR ALL FEATURES ---
-  // Chat Realtime
+  // --- REALTIME SUBSCRIPTIONS ---
+  // Chat
   useEffect(() => {
     if (currentView === 'chat') {
       fetchChatMessages()
@@ -202,69 +207,53 @@ function App() {
     }
   }, [currentView])
 
-  // Gallery Realtime
+  // Gallery
   useEffect(() => {
     if (currentView === 'gallery') {
       fetchPhotos()
       const channel = supabase.channel('photos')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'photos' }, payload => setPhotos(prev => [payload.new, ...prev]))
-        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'photos' }, payload => setPhotos(prev => prev.filter(p => p.id !== payload.old.id)))
         .subscribe()
       return () => supabase.removeChannel(channel)
     }
   }, [currentView])
 
-  // Plans Realtime
-  useEffect(() => {
-    if (currentView === 'plans') {
-      fetchPlans()
-      const channel = supabase.channel('plans')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'plans' }, payload => setPlans(prev => [...prev, payload.new]))
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'plans' }, payload => setPlans(prev => prev.map(p => p.id === payload.new.id ? payload.new : p)))
-        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'plans' }, payload => setPlans(prev => prev.filter(p => p.id !== payload.old.id)))
-        .subscribe()
-      return () => supabase.removeChannel(channel)
-    }
-  }, [currentView])
-
-  // Gifts Realtime
+  // Gifts
   useEffect(() => {
     if (currentView === 'gifts') {
       fetchGifts()
       const channel = supabase.channel('gifts')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'gifts' }, payload => setGifts(prev => [payload.new, ...prev]))
-        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'gifts' }, payload => setGifts(prev => prev.filter(g => g.id !== payload.old.id)))
         .subscribe()
       return () => supabase.removeChannel(channel)
     }
   }, [currentView])
 
-  // History Tree (Timeline) Realtime
+  // Timeline
   useEffect(() => {
     if (currentView === 'timeline') {
       fetchTimeline()
       const channel = supabase.channel('timeline')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'timeline' }, payload => setTimelines(prev => [payload.new, ...prev]))
-        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'timeline' }, payload => setTimelines(prev => prev.filter(t => t.id !== payload.old.id)))
         .subscribe()
       return () => supabase.removeChannel(channel)
     }
   }, [currentView])
 
-  // Question Inbox Realtime
+  // Questions Inbox
   useEffect(() => {
     if (currentView === 'questions') {
       fetchQuestions()
-      const channel = supabase.channel('questions')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'questions' }, payload => { setQuestions(prev => [payload.new, ...prev]); fetchQuestions(); })
+      const qChannel = supabase.channel('questions')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'questions' }, payload => setQuestions(prev => [payload.new, ...prev]))
+        .subscribe()
+      const aChannel = supabase.channel('answers')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'answers' }, payload => {
-          setAnswers(prev => {
-            const qId = payload.new.question_id;
-            return { ...prev, [qId]: [...(prev[qId] || []), payload.new] };
-          });
+          const qId = payload.new.question_id;
+          setAnswers(prev => ({ ...prev, [qId]: [...(prev[qId] || []), payload.new] }));
         })
         .subscribe()
-      return () => supabase.removeChannel(channel)
+      return () => { supabase.removeChannel(qChannel); supabase.removeChannel(aChannel); }
     }
   }, [currentView])
 
@@ -302,7 +291,7 @@ function App() {
         {photos.length === 0 ? (
           <div style={{padding:'3rem 1rem', background:'white', borderRadius:'1rem', color:'#9ca3af', border:'2px dashed #e5e7eb'}}>
             <div style={{fontSize:'3rem'}}>🖼️</div>
-            <p>No memories yet. Upload your first photo together!</p>
+            <p>No memories yet. Ensure bucket is Public.</p>
           </div>
         ) : (
           <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:'1.5rem'}}>
@@ -388,7 +377,7 @@ function App() {
           <button onClick={askRandomQuestion} style={{background:'#f43f5e', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer'}}>Surprise Me ✨</button>
         </div>
         <div style={{maxWidth:'600px', margin:'0 auto'}}>
-          {questions.length === 0 ? <p style={{color:'#9ca3af'}}>No questions yet.</p> : (
+          {questions.length === 0 ? <p style={{color:'#9ca3af'}}>No questions yet. Click "Surprise Me"!</p> : (
             questions.map(q => (
               <div key={q.id} style={{background:'white', padding:'1.5rem', borderRadius:'1.5rem', marginBottom:'1.5rem', boxShadow:'0 2px 8px rgba(0,0,0,0.05)'}}>
                 <div style={{fontWeight:'600', fontSize:'1.1rem', color:'#1f2937', marginBottom:'0.5rem'}}>"{q.text}"</div>
