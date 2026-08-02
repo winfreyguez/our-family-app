@@ -68,22 +68,27 @@ function App() {
   const [signupPin, setSignupPin] = useState('')
   const [userProfile, setUserProfile] = useState(null)
 
-  // --- UNREAD BADGE COUNTS ---
   const [unreadCounts, setUnreadCounts] = useState({
     gallery: 0, timeline: 0, chat: 0, questions: 0, plans: 0, gifts: 0, savings: 0
   })
 
   const [otherProfile, setOtherProfile] = useState(null)
 
+  // --- FAMILY MODE STATE ---
+  const [currentMode, setCurrentMode] = useState('normal') // normal, romantic, sexual
+  const [activeModeRequest, setActiveModeRequest] = useState(null) // For pending approvals
+  const [modeStartTime, setModeStartTime] = useState(null)
+
   const [deferredPrompt, setDeferredPrompt] = useState(null)
   const [showInstallModal, setShowInstallModal] = useState(false)
 
+  // --- NATIVE NAVIGATION (Hardware Back Button) ---
   const [historyStack, setHistoryStack] = useState(['home'])
   const navigateTo = (view) => {
-    // Mark read when navigating to a view
-    localStorage.setItem(`last_read_${view}`, new Date().toISOString())
     setHistoryStack(prev => [...prev, view])
     setCurrentView(view)
+    // Inject browser history state for hardware back button support
+    window.history.pushState(null, '', window.location.pathname + '?view=' + view)
   }
   const goBack = () => {
     if (historyStack.length > 1) {
@@ -95,6 +100,15 @@ function App() {
       setCurrentView('home')
     }
   }
+  // Listen for hardware back button
+  useEffect(() => {
+    const handlePopState = (e) => {
+      e.preventDefault()
+      goBack()
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
 
   const [currentView, setCurrentView] = useState('home')
   const [toast, setToast] = useState(null)
@@ -136,10 +150,9 @@ function App() {
   const [withdrawAmount, setWithdrawAmount] = useState('')
   const [withdrawReason, setWithdrawReason] = useState('')
 
-  // Call State
   const [callType, setCallType] = useState(null)
 
-  // --- NATIVE POPUP NOTIFICATIONS ---
+  // --- NATIVE NOTIFICATIONS ---
   const requestNotificationPermission = () => {
     if (!("Notification" in window)) return
     if (Notification.permission === "default") {
@@ -147,17 +160,12 @@ function App() {
     }
   }
 
-  const sendNativeNotification = (title, body, icon = "❤️") => {
+  const sendNativeNotification = (title, body) => {
     if (!("Notification" in window) || Notification.permission !== "granted") return
-    try {
-      new Notification(title, { body, icon })
-    } catch (e) {
-      // Fallback if icon fails
-      new Notification(title, { body })
-    }
+    try { new Notification(title, { body }) } catch (e) {}
   }
 
-  // PWA Prompt
+  // --- PWA INSTALL ---
   useEffect(() => {
     const handler = (e) => {
       e.preventDefault()
@@ -210,7 +218,7 @@ function App() {
     showToast(`Account created! Welcome, ${data.name}! 💕`)
   }
 
-  // --- CALCULATE UNREAD COUNT & FETCH DATA ---
+  // --- UNREAD COUNTS ---
   const calculateUnread = (data, moduleKey) => {
     const lastRead = localStorage.getItem(`last_read_${moduleKey}`)
     if (!lastRead || data.length === 0) return 0
@@ -224,44 +232,28 @@ function App() {
 
   const fetchPhotos = async () => {
     const { data } = await supabase.from('photos').select('*').order('created_at', { ascending: false })
-    if (data) {
-      setPhotos(data)
-      setUnreadCounts(prev => ({ ...prev, gallery: calculateUnread(data, 'gallery') }))
-    }
+    if (data) { setPhotos(data); setUnreadCounts(prev => ({ ...prev, gallery: calculateUnread(data, 'gallery') })) }
   }
   const fetchPlans = async () => {
     const { data } = await supabase.from('plans').select('*').order('due_date', { ascending: true })
-    if (data) {
-      setPlans(data)
-      setUnreadCounts(prev => ({ ...prev, plans: calculateUnread(data, 'plans') }))
-    }
+    if (data) { setPlans(data); setUnreadCounts(prev => ({ ...prev, plans: calculateUnread(data, 'plans') })) }
   }
   const fetchGifts = async () => {
     const { data } = await supabase.from('gifts').select('*, sender:profiles!sender_id(name), receiver:profiles!receiver_id(name)').order('given_at', { ascending: false })
-    if (data) {
-      setGifts(data)
-      setUnreadCounts(prev => ({ ...prev, gifts: calculateUnread(data, 'gifts') }))
-    }
+    if (data) { setGifts(data); setUnreadCounts(prev => ({ ...prev, gifts: calculateUnread(data, 'gifts') })) }
   }
   const fetchTimeline = async () => {
     const { data } = await supabase.from('timeline').select('*').order('memory_date', { ascending: false })
-    if (data) {
-      setTimelines(data)
-      setUnreadCounts(prev => ({ ...prev, timeline: calculateUnread(data, 'timeline') }))
-    }
+    if (data) { setTimelines(data); setUnreadCounts(prev => ({ ...prev, timeline: calculateUnread(data, 'timeline') })) }
   }
   const fetchChatMessages = async () => {
     const { data } = await supabase.from('chat_messages').select('*').order('created_at', { ascending: true })
-    if (data) {
-      setMessages(data)
-      setUnreadCounts(prev => ({ ...prev, chat: calculateUnread(data, 'chat') }))
-    }
+    if (data) { setMessages(data); setUnreadCounts(prev => ({ ...prev, chat: calculateUnread(data, 'chat') })) }
   }
   const fetchQuestions = async () => {
     const { data } = await supabase.from('questions').select('*, profile:profiles(name)').order('created_at', { ascending: false })
     if (data) {
-      setQuestions(data)
-      setUnreadCounts(prev => ({ ...prev, questions: calculateUnread(data, 'questions') }))
+      setQuestions(data); setUnreadCounts(prev => ({ ...prev, questions: calculateUnread(data, 'questions') }))
       data.forEach(async (q) => {
         const { data: ansData } = await supabase.from('answers').select('*, profile:profiles(name)').eq('question_id', q.id).order('created_at', { ascending: true })
         if (ansData) setAnswers(prev => ({ ...prev, [q.id]: ansData }))
@@ -283,6 +275,7 @@ function App() {
     }
   }
 
+  // --- ACTIONS ---
   const uploadPhoto = async (e) => {
     const file = e.target.files[0]; if (!file) return
     setIsUploading(true)
@@ -459,45 +452,131 @@ function App() {
     showToast('💬 Answer marked correct! 50 Shillings credited!')
   }
 
-  // --- GLOBAL REALTIME NOTIFICATION LISTENER ---
+  // --- FAMILY MODES LOGIC (Romantic, Sexual, Normal) ---
+  const fetchModes = async () => {
+    // Get active mode or pending request
+    const { data } = await supabase.from('family_modes').select('*').order('created_at', { ascending: false }).limit(1)
+    if (data && data.length > 0) {
+      const latest = data[0]
+      if (latest.status === 'active') {
+        setCurrentMode(latest.mode)
+        setModeStartTime(new Date(latest.started_at))
+      } else if (latest.status === 'pending') {
+        setActiveModeRequest(latest)
+      } else {
+        setCurrentMode('normal')
+        setModeStartTime(null)
+      }
+    } else {
+      setCurrentMode('normal')
+    }
+  }
+
+  const requestMode = async (mode) => {
+    if (!userProfile || !otherProfile) return showToast('Other profile not found', 'error')
+    if (currentMode === mode) return showToast('Already in this mode!', 'info')
+    
+    await supabase.from('family_modes').insert({
+      requester_id: userProfile.id,
+      accepter_id: otherProfile.id,
+      mode: mode,
+      status: 'pending'
+    })
+    fetchModes()
+    showToast(`Requested ${mode} mode! Waiting for approval.`)
+  }
+
+  const acceptMode = async (requestId, mode) => {
+    // Start the mode
+    await supabase.from('family_modes').update({ status: 'active', started_at: new Date() }).eq('id', requestId)
+    setActiveModeRequest(null)
+    setCurrentMode(mode)
+    setModeStartTime(new Date())
+    showToast(`✅ ${mode} mode activated!`)
+  }
+
+  const endMode = async () => {
+    if (currentMode === 'normal' || !modeStartTime) return showToast('You are already in Normal mode.', 'info')
+
+    // Only the requester can end mode? Or both? We'll let either end it.
+    const durationSec = (new Date() - modeStartTime) / 1000
+    const minutes = Math.ceil(durationSec / 60)
+    let cost = 0
+
+    if (currentMode === 'sexual') {
+      cost = minutes * 2 // 2 shillings per minute
+    }
+
+    let msg = `Ended ${currentMode} mode.`
+    let updatedWallet = userProfile.wallet
+
+    // If cost exists, deduct from the requester
+    // We can query the active mode to see who the requester was
+    const { data: activeMode } = await supabase.from('family_modes').select('*').eq('status', 'active').single()
+    if (activeMode && cost > 0) {
+      const requesterId = activeMode.requester_id
+      const { data: reqProfile } = await supabase.from('profiles').select('wallet').eq('id', requesterId).single()
+      if (reqProfile.wallet >= cost) {
+        const newWallet = reqProfile.wallet - cost
+        await supabase.from('profiles').update({ wallet: newWallet }).eq('id', requesterId)
+        await supabase.from('transactions').insert({ profile_id: requesterId, amount: -cost, type: 'Mode Fee', description: `Sexual Mode for ${minutes} mins` })
+        msg += ` You were charged ${cost} Shillings.`
+        if (requesterId === userProfile.id) {
+          updatedWallet = newWallet
+        }
+        setUserProfile(prev => ({ ...prev, wallet: updatedWallet }))
+      } else {
+        showToast('Not enough funds to end sexual mode! Please boost wallet first.', 'error')
+        return
+      }
+    }
+
+    await supabase.from('family_modes').update({ status: 'inactive', ended_at: new Date() }).eq('id', activeMode.id)
+    setCurrentMode('normal')
+    setModeStartTime(null)
+    showToast(msg, 'success')
+  }
+
+  // --- GLOBAL NOTIFICATIONS & MODE LISTENER ---
   useEffect(() => {
     if (!userProfile) return;
 
-    // Listen to every table's INSERT
-    const tables = ['photos', 'plans', 'gifts', 'timeline', 'questions', 'answers', 'savings', 'chat_messages'];
+    // Listen to all table events
+    const tables = ['photos', 'plans', 'gifts', 'timeline', 'questions', 'answers', 'savings', 'chat_messages', 'family_modes'];
     const channels = tables.map(table => {
       return supabase.channel(`global_${table}`)
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table }, payload => {
-          // Trigger Native Notification Popup
           if (table === 'chat_messages' && payload.new.sender_name !== userProfile.name) {
             sendNativeNotification('💬 New Message', `${payload.new.sender_name}: ${payload.new.message}`);
-          } else if (table === 'photos') {
-            sendNativeNotification('📸 Gallery Update', 'A new photo was added!');
-          } else if (table === 'plans') {
-            sendNativeNotification('📅 New Plan', `${payload.new.title} was created!`);
-          } else if (table === 'gifts' && payload.new.sender_id !== userProfile.id) {
-            sendNativeNotification('🎁 You received a gift!', 'Tap the Gifts tab to open it.');
-          } else if (table === 'timeline') {
-            sendNativeNotification('🗺️ History Update', `${payload.new.title} was added to the tree!`);
-          } else if (table === 'questions') {
-            sendNativeNotification('📥 New Question', `A new question was added to the Inbox.`);
-          } else if (table === 'answers') {
-            sendNativeNotification('💬 New Reply', `Someone replied to a question.`);
-          } else if (table === 'savings' && payload.new.profile_id !== userProfile.id) {
-            sendNativeNotification('💰 Savings Action', `Your partner made a savings request.`);
+          } else if (table === 'photos') sendNativeNotification('📸 Gallery Update', 'A new photo was added!');
+          else if (table === 'plans') sendNativeNotification('📅 New Plan', `${payload.new.title} was created!`);
+          else if (table === 'gifts' && payload.new.sender_id !== userProfile.id) sendNativeNotification('🎁 You received a gift!', 'Tap the Gifts tab to open it.');
+          else if (table === 'timeline') sendNativeNotification('🗺️ History Update', `${payload.new.title} was added to the tree!`);
+          else if (table === 'questions') sendNativeNotification('📥 New Question', `A new question was added to the Inbox.`);
+          else if (table === 'answers') sendNativeNotification('💬 New Reply', `Someone replied to a question.`);
+          else if (table === 'savings' && payload.new.profile_id !== userProfile.id) sendNativeNotification('💰 Savings Action', `Your partner made a savings request.`);
+          else if (table === 'family_modes' && payload.new.requester_id !== userProfile.id && payload.new.status === 'pending') {
+            sendNativeNotification('💞 Mode Request', `${otherProfile?.name} wants to switch to ${payload.new.mode} mode.`);
+            showToast(`${otherProfile?.name} wants to switch to ${payload.new.mode} mode!`, 'info');
+            setActiveModeRequest(payload.new);
           }
-          // Update unread counts locally instantly
-          const moduleKey = table === 'chat_messages' ? 'chat' : 
-                            table === 'photos' ? 'gallery' : table;
-          setUnreadCounts(prev => ({ ...prev, [moduleKey]: (prev[moduleKey] || 0) + 1 }));
+          
+          const moduleKey = table === 'chat_messages' ? 'chat' : table === 'photos' ? 'gallery' : table === 'family_modes' ? null : table;
+          if (moduleKey) setUnreadCounts(prev => ({ ...prev, [moduleKey]: (prev[moduleKey] || 0) + 1 }));
         })
-        .subscribe();
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'family_modes' }, payload => {
+          if (payload.new.status === 'active') {
+            setCurrentMode(payload.new.mode)
+            setModeStartTime(new Date(payload.new.started_at))
+            setActiveModeRequest(null)
+            showToast(`✅ ${payload.new.mode} mode activated!`)
+          }
+        })
+        .subscribe()
     });
 
-    return () => {
-      channels.forEach(channel => supabase.removeChannel(channel));
-    };
-  }, [userProfile]);
+    return () => { channels.forEach(channel => supabase.removeChannel(channel)); };
+  }, [userProfile, otherProfile]);
 
   // --- EFFECTS ---
   useEffect(() => { if (currentView === 'gallery') fetchPhotos() }, [currentView])
@@ -508,7 +587,10 @@ function App() {
   useEffect(() => { if (currentView === 'wallet') fetchTransactions() }, [currentView])
   useEffect(() => { if (currentView === 'savings') fetchSavings() }, [currentView])
 
-  // --- READ RECEIPT & ONLINE STATUS LOGIC ---
+  // Fetch modes on load
+  useEffect(() => { if (isLoggedIn) fetchModes() }, [isLoggedIn])
+
+  // --- ONLINE STATUS ---
   useEffect(() => {
     if (!userProfile) return
     const fetchOther = async () => {
@@ -516,7 +598,6 @@ function App() {
       if (data) setOtherProfile(data)
     }
     fetchOther()
-
     const channel = supabase.channel('profiles')
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, payload => {
         if (payload.new.id !== userProfile.id) setOtherProfile(payload.new)
@@ -528,25 +609,21 @@ function App() {
   useEffect(() => {
     if (!userProfile) return
     const setStatus = async (isOnline) => {
-      await supabase.from('profiles').update({ 
-        is_online: isOnline, 
-        last_seen: isOnline ? null : new Date() 
-      }).eq('id', userProfile.id)
+      await supabase.from('profiles').update({ is_online: isOnline, last_seen: isOnline ? null : new Date() }).eq('id', userProfile.id)
     }
     setStatus(true)
-
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') setStatus(true)
       else setStatus(false)
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
-
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       setStatus(false)
     }
   }, [userProfile])
 
+  // --- READ RECEIPTS ---
   const markMessagesAsRead = async () => {
     if (!userProfile || messages.length === 0) return
     await supabase.from('chat_messages')
@@ -555,6 +632,7 @@ function App() {
       .eq('is_read', false)
   }
 
+  // --- REALTIME ---
   useEffect(() => {
     if (currentView === 'chat') {
       fetchChatMessages()
@@ -563,23 +641,20 @@ function App() {
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chat_messages' }, payload => setMessages(prev => prev.map(m => m.id === payload.new.id ? payload.new : m)))
         .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'chat_messages' }, payload => setMessages(prev => prev.filter(m => m.id !== payload.old.id)))
         .subscribe()
-      
       setTimeout(() => markMessagesAsRead(), 500)
       return () => supabase.removeChannel(channel)
     }
   }, [currentView])
 
-  useEffect(() => {
-    if (currentView === 'gifts') {
-      const gChannel = supabase.channel('gifts')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'gifts' }, payload => setGifts(prev => [payload.new, ...prev]))
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'gifts' }, payload => setGifts(prev => prev.map(g => g.id === payload.new.id ? payload.new : g)))
-        .subscribe()
-      return () => supabase.removeChannel(gChannel)
-    }
-  }, [currentView])
-
   const startDate = new Date('2017-01-01'); const now = new Date(); const diffMs = now - startDate; const totalDays = Math.floor(diffMs / (1000 * 60 * 60 * 24)); const years = Math.floor(totalDays / 365); const remainingDays = totalDays % 365; const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+
+  // --- MODE DYNAMIC STYLES ---
+  const modeColors = {
+    normal: { bg: 'linear-gradient(135deg, #fff0f5, #f3e8ff, #ffebf0)', accent: '#f43f5e', text: '#1f2937', card: 'rgba(255, 255, 255, 0.7)' },
+    romantic: { bg: 'linear-gradient(135deg, #ffe4e6, #ffc0cb, #db2777)', accent: '#be123c', text: '#4c0519', card: 'rgba(255, 255, 255, 0.5)' },
+    sexual: { bg: 'linear-gradient(135deg, #1f0933, #4c1d95, #6b21a8)', accent: '#a855f7', text: '#e9d5ff', card: 'rgba(0,0,0,0.3)' }
+  }
+  const currentStyle = modeColors[currentMode] || modeColors.normal
 
   // --- LOGIN ---
   if (!isLoggedIn) {
@@ -696,7 +771,16 @@ function App() {
       <div style={{fontFamily:'Inter, sans-serif', height:'100vh', display:'flex', flexDirection:'column', overflow:'hidden', background:'linear-gradient(180deg, #fff0f5, #f3e8ff)'}}>
         <div style={{background:'linear-gradient(135deg, #f43f5e, #a78bfa)', color:'white', padding:'1rem 1.5rem', display:'flex', justifyContent:'space-between', alignItems:'center', boxShadow:'0 2px 4px rgba(0,0,0,0.1)'}}>
           <button onClick={goBack} style={{background:'none', border:'none', color:'white', fontSize:'1.2rem', cursor:'pointer'}}>←</button>
-          <div style={{fontWeight:'700', fontSize:'1.1rem', textAlign:'center'}}>💞 Winfrey & George</div>
+          <div style={{fontWeight:'700', fontSize:'1.1rem', textAlign:'center'}}>
+            💞 Winfrey & George
+            {/* ONLINE STATUS IN CHAT HEADER */}
+            {otherProfile && (
+              <div style={{fontSize:'0.7rem', fontWeight:'400', display:'flex', alignItems:'center', justifyContent:'center', gap:'0.3rem', marginTop:'0.1rem'}}>
+                <div style={{width:'8px', height:'8px', borderRadius:'50%', background: otherProfile.is_online ? '#10b981' : '#9ca3af'}}></div>
+                <span>{otherProfile.is_online ? 'Online' : `Last seen ${timeAgo(otherProfile.last_seen)}`}</span>
+              </div>
+            )}
+          </div>
           <div style={{width:'24px'}}></div>
         </div>
         <div style={{flex:1, overflowY:'auto', padding:'1rem 1.5rem', display:'flex', flexDirection:'column', gap:'0.5rem'}}>
@@ -736,9 +820,15 @@ function App() {
                       </div>
                     )}
                   </div>
+                  
+                  {/* WHATSAPP-STYLE TICKS */}
                   {isMe && (
-                    <div style={{fontSize:'0.65rem', color: msg.is_read ? '#10b981' : '#9ca3af', marginTop:'2px', marginRight:'4px', alignSelf:'flex-end'}}>
-                      {msg.is_read ? '👁️ Read' : '✓ Sent'}
+                    <div style={{fontSize:'0.65rem', marginTop:'2px', marginRight:'4px', alignSelf:'flex-end', fontWeight:'bold'}}>
+                      {msg.is_read ? (
+                        <span style={{color:'#3b82f6'}}>✓✓</span>
+                      ) : (
+                        <span style={{color:'#9ca3af'}}>✓</span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1008,17 +1098,40 @@ function App() {
     )
   }
 
-  // --- HOME DASHBOARD WITH BADGES ---
+  // --- HOME DASHBOARD WITH MODES, CALLS, AND DYNAMIC STYLES ---
   return (
-    <div style={{fontFamily:'Inter, sans-serif', minHeight:'100vh', background:'linear-gradient(135deg, #fff0f5, #f3e8ff, #ffebf0)', padding:'2rem 1rem'}}>
+    <div style={{fontFamily:'Inter, sans-serif', minHeight:'100vh', background: currentStyle.bg, padding:'2rem 1rem', transition:'background 1s ease-in-out, color 0.5s ease'}}>
       
-      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'1rem 1rem 0.5rem 1rem', maxWidth:'800px', margin:'0 auto'}}>
-        <div style={{fontWeight:'700', fontSize:'1.2rem', color:'#f43f5e', letterSpacing:'-0.5px'}}>Winfrey & George</div>
+      {/* MODE ANIMATIONS */}
+      <style>
+        {currentMode === 'romantic' && `
+          @keyframes floatHearts { 0% { opacity:0; transform: translateY(0) scale(0.5); } 50% { opacity:0.8; } 100% { opacity:0; transform: translateY(-100px) scale(1.2); } }
+          body { overflow-x: hidden; }
+        `}
+        {currentMode === 'sexual' && `
+          @keyframes pulseGlow { 0% { box-shadow: 0 0 5px #a855f7, 0 0 10px #a855f7; } 50% { box-shadow: 0 0 20px #a855f7, 0 0 40px #7e22ce; } 100% { box-shadow: 0 0 5px #a855f7, 0 0 10px #a855f7; } }
+        `}
+      </style>
+
+      {/* ROMANTIC MODE HEARTS */}
+      {currentMode === 'romantic' && (
+        <div style={{position:'fixed', top:'10%', left:'10%', pointerEvents:'none', zIndex:0}}>
+          <div style={{fontSize:'2rem', animation:'floatHearts 4s infinite'}}>❤️</div>
+          <div style={{fontSize:'1.5rem', animation:'floatHearts 5s infinite 1s', position:'absolute', top:'50px', left:'80px'}}>❤️</div>
+          <div style={{fontSize:'3rem', animation:'floatHearts 6s infinite 2s', position:'absolute', top:'100px', left:'-20px'}}>❤️</div>
+        </div>
+      )}
+
+      {/* SEXUAL MODE GLOW */}
+      {currentMode === 'sexual' && (
+        <div style={{position:'fixed', top:'0', left:'0', width:'100%', height:'100%', pointerEvents:'none', zIndex:0, background:'radial-gradient(circle, rgba(168,85,247,0.2) 0%, rgba(0,0,0,0.7) 100%)', animation:'pulseGlow 3s infinite alternate'}}></div>
+      )}
+
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'1rem 1rem 0.5rem 1rem', maxWidth:'800px', margin:'0 auto', position:'relative', zIndex:1}}>
+        <div style={{fontWeight:'700', fontSize:'1.2rem', color: currentStyle.accent, letterSpacing:'-0.5px'}}>Winfrey & George</div>
         <button 
           onClick={handleInstallClick} 
-          style={{background:'transparent', border:'none', cursor:'pointer', display:'flex', alignItems:'center', gap:'0.3rem', fontWeight:'600', color:'#1f2937', padding:'0.3rem 0.8rem', borderRadius:'2rem', border:'1px solid #e5e7eb'}}
-          onMouseOver={(e) => e.target.style.borderColor='#f43f5e'}
-          onMouseOut={(e) => e.target.style.borderColor='#e5e7eb'}
+          style={{background:'transparent', border:'1px solid '+currentStyle.accent, cursor:'pointer', display:'flex', alignItems:'center', gap:'0.3rem', fontWeight:'600', color: currentStyle.text, padding:'0.3rem 0.8rem', borderRadius:'2rem'}}
         >
           <span style={{fontSize:'1.2rem'}}>📲</span> Install
         </button>
@@ -1039,8 +1152,8 @@ function App() {
         </div>
       )}
 
-      <div style={{maxWidth:'800px', margin:'0 auto'}}>
-        <div style={{background:'rgba(255, 255, 255, 0.7)', backdropFilter:'blur(16px)', borderRadius:'2rem', padding:'3rem 2rem', boxShadow:'0 20px 40px rgba(244, 63, 94, 0.15), inset 0 0 0 1px rgba(255,255,255,0.6)', textAlign:'center', marginBottom:'2rem', border:'1px solid rgba(255,255,255,0.5)'}}>
+      <div style={{maxWidth:'800px', margin:'0 auto', position:'relative', zIndex:1}}>
+        <div style={{background: currentStyle.card, backdropFilter:'blur(16px)', borderRadius:'2rem', padding:'3rem 2rem', boxShadow:'0 20px 40px rgba(0,0,0,0.1)', textAlign:'center', marginBottom:'2rem', border:'1px solid rgba(255,255,255,0.3)'}}>
           <div style={{fontSize:'4rem', marginBottom:'0.5rem', animation:'heartBeat 1.5s infinite'}}>💕</div>
           <h1 style={{background:'linear-gradient(135deg, #f43f5e, #8b5cf6)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', fontSize:'2.5rem', fontWeight:'700', marginBottom:'0.5rem'}}>Winfrey & George</h1>
           <div style={{fontSize:'1.1rem', color:'#6b7280', background:'#fce4ec', padding:'0.5rem 1.5rem', borderRadius:'2rem', display:'inline-block'}}>
@@ -1049,14 +1162,8 @@ function App() {
           
           {otherProfile && (
             <div style={{marginTop:'1rem', fontSize:'0.95rem', display:'flex', justifyContent:'center', alignItems:'center', gap:'0.5rem'}}>
-              <div style={{
-                width: '10px',
-                height: '10px',
-                borderRadius: '50%',
-                background: otherProfile.is_online ? '#10b981' : '#9ca3af',
-                display: 'inline-block'
-              }}></div>
-              <span>
+              <div style={{width:'10px', height:'10px', borderRadius:'50%', background: otherProfile.is_online ? '#10b981' : '#9ca3af', display:'inline-block'}}></div>
+              <span style={{color: currentStyle.text}}>
                 {otherProfile.is_online 
                   ? `${otherProfile.name} is Online 🟢` 
                   : `${otherProfile.name} was last seen ${timeAgo(otherProfile.last_seen)}`
@@ -1066,15 +1173,36 @@ function App() {
           )}
         </div>
 
+        {/* MODE SELECTION BUTTONS */}
+        <div style={{display:'flex', flexWrap:'wrap', gap:'0.5rem', justifyContent:'center', marginBottom:'2rem', padding:'0.5rem', background:'rgba(255,255,255,0.4)', borderRadius:'2rem', backdropFilter:'blur(4px)'}}>
+          <button onClick={() => requestMode('normal')} style={{flex:1, minWidth:'80px', padding:'0.5rem 1rem', borderRadius:'2rem', border:'none', fontWeight:'600', cursor:'pointer', background: currentMode === 'normal' ? '#4ade80' : 'white', color: currentMode === 'normal' ? 'white' : '#1f2937', boxShadow: currentMode === 'normal' ? '0 4px 12px rgba(74,222,128,0.4)' : 'none'}}>Normal 🟢</button>
+          <button onClick={() => requestMode('romantic')} style={{flex:1, minWidth:'80px', padding:'0.5rem 1rem', borderRadius:'2rem', border:'none', fontWeight:'600', cursor:'pointer', background: currentMode === 'romantic' ? '#db2777' : 'white', color: currentMode === 'romantic' ? 'white' : '#1f2937', boxShadow: currentMode === 'romantic' ? '0 4px 12px rgba(219,39,119,0.4)' : 'none'}}>Romantic ❤️</button>
+          <button onClick={() => requestMode('sexual')} style={{flex:1, minWidth:'80px', padding:'0.5rem 1rem', borderRadius:'2rem', border:'none', fontWeight:'600', cursor:'pointer', background: currentMode === 'sexual' ? '#a855f7' : 'white', color: currentMode === 'sexual' ? 'white' : '#1f2937', boxShadow: currentMode === 'sexual' ? '0 4px 12px rgba(168,85,247,0.4)' : 'none'}}>Sexual 🔥</button>
+          {currentMode !== 'normal' && <button onClick={endMode} style={{flex:1, minWidth:'80px', padding:'0.5rem 1rem', borderRadius:'2rem', border:'none', fontWeight:'600', cursor:'pointer', background:'#ef4444', color:'white'}}>End Mode ✕</button>}
+        </div>
+
+        {/* PENDING APPROVAL POPUP */}
+        {activeModeRequest && (
+          <div style={{background:'rgba(255,255,255,0.95)', padding:'1rem', borderRadius:'1rem', marginBottom:'2rem', textAlign:'center', boxShadow:'0 4px 12px rgba(0,0,0,0.1)'}}>
+            <p>{otherProfile?.name} wants to switch to <b>{activeModeRequest.mode}</b> mode.</p>
+            <div style={{display:'flex', gap:'1rem', justifyContent:'center', marginTop:'0.5rem'}}>
+              <button onClick={() => acceptMode(activeModeRequest.id, activeModeRequest.mode)} style={{background:'#10b981', color:'white', padding:'0.5rem 1rem', borderRadius:'2rem', border:'none', fontWeight:'bold', cursor:'pointer'}}>Accept</button>
+              <button onClick={() => supabase.from('family_modes').update({status:'rejected'}).eq('id', activeModeRequest.id)} style={{background:'#ef4444', color:'white', padding:'0.5rem 1rem', borderRadius:'2rem', border:'none', fontWeight:'bold', cursor:'pointer'}}>Reject</button>
+            </div>
+          </div>
+        )}
+
+        {/* HOME MENU CARDS */}
         <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(140px, 1fr))', gap:'1rem'}}>
-          <MenuCard icon="📸" title="Gallery" action={() => navigateTo('gallery')} badge={unreadCounts.gallery} />
-          <MenuCard icon="📖" title="History Tree" action={() => navigateTo('timeline')} badge={unreadCounts.timeline} />
-          <MenuCard icon="📥" title="Inbox" action={() => navigateTo('questions')} badge={unreadCounts.questions} />
-          <MenuCard icon="💬" title="Chat" action={() => navigateTo('chat')} badge={unreadCounts.chat} />
-          <MenuCard icon="📞" title="Call" action={() => setCallType('video')} />
-          <MenuCard icon="📅" title="Plans" action={() => navigateTo('plans')} badge={unreadCounts.plans} />
-          <MenuCard icon="🎁" title="Gifts" action={() => navigateTo('gifts')} badge={unreadCounts.gifts} />
-          <MenuCard icon="💰" title="Savings" action={() => navigateTo('savings')} badge={unreadCounts.savings} />
+          <MenuCard icon="📸" title="Gallery" action={() => navigateTo('gallery')} badge={unreadCounts.gallery} accent={currentStyle.accent} />
+          <MenuCard icon="📖" title="History Tree" action={() => navigateTo('timeline')} badge={unreadCounts.timeline} accent={currentStyle.accent} />
+          <MenuCard icon="📥" title="Inbox" action={() => navigateTo('questions')} badge={unreadCounts.questions} accent={currentStyle.accent} />
+          <MenuCard icon="💬" title="Chat" action={() => navigateTo('chat')} badge={unreadCounts.chat} accent={currentStyle.accent} />
+          <MenuCard icon="📹" title="Video Call" action={() => setCallType('video')} accent={currentStyle.accent} />
+          <MenuCard icon="🎙️" title="Voice Call" action={() => setCallType('voice')} accent={currentStyle.accent} />
+          <MenuCard icon="📅" title="Plans" action={() => navigateTo('plans')} badge={unreadCounts.plans} accent={currentStyle.accent} />
+          <MenuCard icon="🎁" title="Gifts" action={() => navigateTo('gifts')} badge={unreadCounts.gifts} accent={currentStyle.accent} />
+          <MenuCard icon="💰" title="Savings" action={() => navigateTo('savings')} badge={unreadCounts.savings} accent={currentStyle.accent} />
         </div>
         
         <button onClick={() => setIsLoggedIn(false)} style={{display:'block', margin:'3rem auto 0', background:'linear-gradient(135deg, #1f2937, #4b5563)', color:'white', padding:'0.75rem 2.5rem', border:'none', borderRadius:'2rem', fontSize:'0.95rem', cursor:'pointer', fontWeight:'500', boxShadow:'0 4px 12px rgba(0,0,0,0.1)'}}>Log Out</button>
@@ -1084,6 +1212,7 @@ function App() {
       )}
       <style>{`
         @keyframes heartBeat { 0% { transform: scale(1); } 14% { transform: scale(1.3); } 28% { transform: scale(1); } 42% { transform: scale(1.3); } 70% { transform: scale(1); } }
+        @keyframes fadeIn { from { opacity:0; transform: translateY(10px); } to { opacity:1; transform: translateY(0); } }
       `}</style>
     </div>
   )
@@ -1103,8 +1232,8 @@ const ViewWrapper = ({ title, children, goBack }) => (
   </div>
 )
 
-const MenuCard = ({ icon, title, action, badge }) => (
-  <div onClick={action} style={{position:'relative', background:'white', padding:'2rem 1rem', borderRadius:'1.5rem', boxShadow:'0 4px 12px rgba(0,0,0,0.05)', textAlign:'center', cursor:'pointer', transition:'all 0.2s', border:'2px solid transparent'}} onMouseOver={(e) => {e.target.style.transform='translateY(-4px)'; e.target.style.borderColor='#f43f5e';}} onMouseOut={(e) => {e.target.style.transform='translateY(0)'; e.target.style.borderColor='transparent';}}>
+const MenuCard = ({ icon, title, action, badge, accent }) => (
+  <div onClick={action} style={{position:'relative', background:'white', padding:'2rem 1rem', borderRadius:'1.5rem', boxShadow:'0 4px 12px rgba(0,0,0,0.05)', textAlign:'center', cursor:'pointer', transition:'all 0.2s', border:'2px solid transparent'}} onMouseOver={(e) => {e.target.style.transform='translateY(-4px)'; e.target.style.borderColor=accent;}} onMouseOut={(e) => {e.target.style.transform='translateY(0)'; e.target.style.borderColor='transparent';}}>
     <div style={{fontSize:'2.5rem', marginBottom:'0.5rem'}}>{icon}</div>
     <div style={{fontWeight:'600', color:'#1f2937'}}>{title}</div>
     {badge > 0 && (
