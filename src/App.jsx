@@ -358,6 +358,14 @@ function App() {
     await supabase.from('gifts').delete().eq('id', id); fetchGifts(); showToast('Gift removed')
   }
 
+  // --- THE TARGET FIX: sendChatMessage WITH DEBUG LOG ---
+  console.log("🚀 sendChatMessage is now DEFINED!");
+  const sendChatMessage = async () => {
+    if (!chatInput.trim() || !userProfile) return
+    await supabase.from('chat_messages').insert({ sender_name: userProfile.name, message: chatInput })
+    setChatInput('')
+  }
+
   const addTimeline = async () => {
     if (!tlTitle || !tlDate) return showToast('Fill in title & date!', 'error')
     await supabase.from('timeline').insert({ title: tlTitle, description: tlDesc || 'A beautiful memory ✨', memory_date: tlDate })
