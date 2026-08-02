@@ -66,6 +66,7 @@ function App() {
   const [userProfile, setUserProfile] = useState(null)
 
   const [deferredPrompt, setDeferredPrompt] = useState(null)
+  const [showInstallModal, setShowInstallModal] = useState(false)
 
   const [historyStack, setHistoryStack] = useState(['home'])
   const navigateTo = (view) => {
@@ -123,6 +124,7 @@ function App() {
   const [withdrawAmount, setWithdrawAmount] = useState('')
   const [withdrawReason, setWithdrawReason] = useState('')
 
+  // PWA Prompt
   useEffect(() => {
     const handler = (e) => {
       e.preventDefault()
@@ -139,11 +141,9 @@ function App() {
       if (outcome === 'accepted') {
         setDeferredPrompt(null)
         showToast('App installed successfully! 🎉')
-      } else {
-        showToast('Installation cancelled.', 'info')
       }
     } else {
-      showToast('Open this on a mobile browser to install!', 'info')
+      setShowInstallModal(true)
     }
   }
 
@@ -823,7 +823,7 @@ function App() {
     )
   }
 
-  // --- HOME DASHBOARD (Cleaned up to avoid parser syntax errors) ---
+  // --- HOME DASHBOARD ---
   return (
     <div style={{fontFamily:'Inter, sans-serif', minHeight:'100vh', background:'linear-gradient(135deg, #fff0f5, #f3e8ff, #ffebf0)', padding:'2rem 1rem'}}>
       
@@ -840,6 +840,22 @@ function App() {
           <span style={{fontSize:'1.2rem'}}>📲</span> Install
         </button>
       </div>
+
+      {/* INSTALL MANUAL MODAL */}
+      {showInstallModal && (
+        <div style={{position:'fixed', inset:'0', background:'rgba(0,0,0,0.7)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:'9999', padding:'1rem'}}>
+          <div style={{background:'white', padding:'2rem', borderRadius:'1.5rem', maxWidth:'380px', width:'100%', textAlign:'center'}}>
+            <div style={{fontSize:'3rem', marginBottom:'0.5rem'}}>📲</div>
+            <h2 style={{color:'#f43f5e', marginBottom:'1rem'}}>Install on Android</h2>
+            <p style={{color:'#4b5563', fontSize:'0.95rem', marginBottom:'1.5rem', lineHeight:'1.6', textAlign:'left'}}>
+              1. Tap the <b>three dots</b> in the top right of Chrome.<br/>
+              2. Tap <b>"Add to Home Screen"</b>.<br/>
+              3. Tap <b>"Add"</b>.
+            </p>
+            <button onClick={() => setShowInstallModal(false)} style={{background:'#1f2937', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer', width:'100%'}}>Got it!</button>
+          </div>
+        </div>
+      )}
 
       <div style={{maxWidth:'800px', margin:'0 auto'}}>
         <div style={{background:'rgba(255, 255, 255, 0.7)', backdropFilter:'blur(16px)', borderRadius:'2rem', padding:'3rem 2rem', boxShadow:'0 20px 40px rgba(244, 63, 94, 0.15), inset 0 0 0 1px rgba(255,255,255,0.6)', textAlign:'center', marginBottom:'2rem', border:'1px solid rgba(255,255,255,0.5)'}}>
@@ -872,7 +888,6 @@ function App() {
   )
 }
 
-// --- NATIVE HEADER (Top-Left Back Button, Centered Title) ---
 const ViewWrapper = ({ title, children, goBack }) => (
   <div style={{fontFamily:'Inter, sans-serif', minHeight:'100vh', background:'linear-gradient(135deg, #fff0f5, #f3e8ff, #ffebf0)', padding:'2rem 1rem', display:'flex', flexDirection:'column'}}>
     <div style={{maxWidth:'800px', margin:'0 auto', width:'100%'}}>
