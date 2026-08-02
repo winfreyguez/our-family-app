@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
+import ParticleGift from './ParticleGift' // Import our new animation
 
 // --- APP CONFIG ---
 const START_DATE = new Date('2024-01-01') // Change this to your actual anniversary!
@@ -60,6 +61,9 @@ function App() {
   const [newQuestionText, setNewQuestionText] = useState('')
   const [replyingTo, setReplyingTo] = useState(null)
   const [replyText, setReplyText] = useState('')
+
+  // Gift Animation State
+  const [activeParticleGift, setActiveParticleGift] = useState(null)
 
   // --- TOAST ---
   const showToast = (msg, type = 'success') => {
@@ -134,12 +138,22 @@ function App() {
     await supabase.from('plans').delete().eq('id', id); fetchPlans(); showToast('Plan deleted')
   }
 
+  // --- CREATIVE GIFTS PATTERN ---
   const sendGift = async () => {
     if (!giftMsg) return showToast('Write a message!', 'error')
     const emoji = GIFT_EMOJIS[Math.floor(Math.random() * GIFT_EMOJIS.length)]
     await supabase.from('gifts').insert({ message: `${emoji} ${giftMsg}` })
     setGiftMsg(''); fetchGifts(); showToast(`Gift sent! ${emoji}`)
   }
+  
+  // Send the "I Love You" Particle Heart Gift
+  const sendHeartGift = async () => {
+    const emoji = '❤️'
+    await supabase.from('gifts').insert({ message: `${emoji} I Love You 💕` })
+    fetchGifts(); showToast(`Magic gift sent! ${emoji}`)
+    setActiveParticleGift({ message: 'I Love You', color: '#00d2ff' })
+  }
+
   const deleteGift = async (id) => {
     await supabase.from('gifts').delete().eq('id', id); fetchGifts(); showToast('Gift removed')
   }
@@ -157,7 +171,7 @@ function App() {
   const askRandomQuestion = async () => {
     const { data } = await supabase.from('questions').select('*').order('random()').limit(1).single()
     if (data) {
-      setNewQuestionText('') // Clear manual input
+      setNewQuestionText('')
       showToast(`Question added to inbox!`, 'success')
       fetchQuestions()
     } else {
@@ -202,6 +216,17 @@ function App() {
           <button onClick={handleLogin} style={{width:'100%', background:'#f43f5e', color:'white', padding:'1rem', border:'none', borderRadius:'1rem', fontSize:'1rem', fontWeight:'600', cursor:'pointer', transition:'0.2s', boxShadow:'0 4px 12px rgba(244, 63, 94, 0.3)'}} onMouseOver={(e) => e.target.style.transform='scale(1.02)'} onMouseOut={(e) => e.target.style.transform='scale(1)'}>Unlock 💕</button>
         </div>
       </div>
+    )
+  }
+
+  // --- GIFT ANIMATION OVERLAY ---
+  if (activeParticleGift) {
+    return (
+      <ParticleGift 
+        message={activeParticleGift.message} 
+        color={activeParticleGift.color} 
+        onClose={() => setActiveParticleGift(null)} 
+      />
     )
   }
 
@@ -336,7 +361,8 @@ function App() {
       <ViewWrapper title="🎁 Gifts" goHome={() => setCurrentView('home')}>
         <div style={{display:'flex', flexWrap:'wrap', gap:'0.75rem', justifyContent:'center', marginBottom:'2rem'}}>
           <input type="text" placeholder="Write a sweet message..." value={giftMsg} onChange={(e) => setGiftMsg(e.target.value)} style={{flex:'1', padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none', minWidth:'200px'}} />
-          <button onClick={sendGift} style={{background:'#f43f5e', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer'}}>Send Gift ✨</button>
+          <button onClick={sendGift} style={{background:'#f43f5e', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer'}}>Send Message ✨</button>
+          <button onClick={sendHeartGift} style={{background:'#00d2ff', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer', boxShadow:'0 4px 12px rgba(0,210,255,0.4)'}}>Send ❤️ I Love You</button>
         </div>
         <div style={{maxWidth:'600px', margin:'0 auto'}}>
           {gifts.length === 0 ? (
