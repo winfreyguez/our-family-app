@@ -3,6 +3,31 @@ import { supabase } from './supabaseClient'
 import ParticleGift from './ParticleGift'
 import VideoCall from './VideoCall'
 
+// --- GLOBAL SAFETY CHECK (PREVENTS BLANK WHITE PAGE) ---
+const url = import.meta.env.VITE_SUPABASE_URL;
+const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+if (!url || !key) {
+  // If keys are missing, we show this error instead of a white screen
+  document.body.innerHTML = `
+    <div style="font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background: #fce4ec; padding: 20px; text-align: center;">
+      <div style="background: white; padding: 40px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); max-width: 500px;">
+        <h1 style="color: #f43f5e;">🔑 Keys Missing!</h1>
+        <p style="color: #4b5563; line-height: 1.6; font-size: 1.1rem;">
+          Your Render Environment Variables are not set.
+          <br/><br/>
+          Please go to <b>Render</b> > <b>Environment</b> and add:
+          <br/><br/>
+          <code style="background: #f3f4f6; padding: 8px 12px; border-radius: 8px; display: block; margin: 10px 0; font-weight: bold;">VITE_SUPABASE_URL</code>
+          <code style="background: #f3f4f6; padding: 8px 12px; border-radius: 8px; display: block; margin: 10px 0; font-weight: bold;">VITE_SUPABASE_ANON_KEY</code>
+          <br/>
+          Then click <b>"Clear build cache & deploy"</b>.
+        </p>
+      </div>
+    </div>
+  `;
+  throw new Error("Config Missing"); // Stops React from running
+}
+
 // --- GIFTS CATALOG ---
 const LIVELY_GIFTS = [
   { label: 'Good Morning ☀️', price: 50, category: 'Daily Love' },
@@ -493,11 +518,8 @@ function App() {
     navigateTo('home');
   };
 
-  // --- OPTIMISTIC CHAT SEND (INSTANTLY SHOWS ON YOUR SCREEN) ---
   const sendChatMessage = async () => {
     if (!chatInput.trim() || !userProfile) return
-    
-    // Optimistic UI: Fake the message locally so it appears INSTANTLY
     const tempId = `temp_${Date.now()}`;
     const optimisticMsg = {
       id: tempId,
@@ -511,14 +533,12 @@ function App() {
     setMessages(prev => [...prev, optimisticMsg]);
     setChatInput('');
 
-    // Send to DB
     const { error } = await supabase.from('chat_messages').insert({
       sender_name: userProfile.name,
       message: chatInput
     });
 
     if (error) {
-      // Revert if DB fails
       setMessages(prev => prev.filter(m => m.id !== tempId));
       showToast('Failed to send message', 'error');
     }
@@ -660,7 +680,6 @@ function App() {
           if (table === 'chat_messages' && payload.new.sender_name !== userProfile.name) {
             sendNativeNotification('💬 New Message', `${payload.new.sender_name}: ${payload.new.message}`);
             setMessages(prev => {
-              // Prevent duplicates if already added by Optimistic UI
               const exists = prev.some(m => m.id === payload.new.id || (m.sender_name === payload.new.sender_name && m.message === payload.new.message && Math.abs(new Date(m.created_at) - new Date(payload.new.created_at)) < 2000));
               if (exists) return prev;
               return [...prev, payload.new];
@@ -682,7 +701,6 @@ function App() {
           if (moduleKey) {
             setUnreadCounts(prev => ({ ...prev, [moduleKey]: (prev[moduleKey] || 0) + 1 }));
             
-            // Update specific state arrays instantly (excluding chat which is handled with duplicate prevention above)
             if (table === 'photos') setPhotos(prev => [payload.new, ...prev]);
             else if (table === 'plans') setPlans(prev => [...prev, payload.new]);
             else if (table === 'gifts') setGifts(prev => [payload.new, ...prev]);
