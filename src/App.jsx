@@ -74,20 +74,17 @@ function App() {
 
   const [otherProfile, setOtherProfile] = useState(null)
 
-  // --- FAMILY MODE STATE ---
   const [currentMode, setCurrentMode] = useState('normal') 
   const [activeModeRequest, setActiveModeRequest] = useState(null) 
   const [modeStartTime, setModeStartTime] = useState(null)
 
-  // --- CALL STATE ---
   const [callType, setCallType] = useState(null)
   const [callRoom, setCallRoom] = useState(null)
-  const [incomingCall, setIncomingCall] = useState(null) // Stores the incoming call object
+  const [incomingCall, setIncomingCall] = useState(null)
 
   const [deferredPrompt, setDeferredPrompt] = useState(null)
   const [showInstallModal, setShowInstallModal] = useState(false)
 
-  // --- NATIVE NAVIGATION ---
   const [historyStack, setHistoryStack] = useState(['home'])
   const navigateTo = (view) => {
     setHistoryStack(prev => [...prev, view])
@@ -153,19 +150,24 @@ function App() {
   const [withdrawAmount, setWithdrawAmount] = useState('')
   const [withdrawReason, setWithdrawReason] = useState('')
 
-  // --- NATIVE NOTIFICATIONS ---
   const requestNotificationPermission = () => {
     if (!("Notification" in window)) return
     if (Notification.permission === "default") {
-      Notification.requestPermission()
+      Notification.requestPermission().then(perm => {
+        if (perm === 'granted') showToast('Notifications Enabled! 💬')
+      })
+    } else if (Notification.permission === "granted") {
+      showToast('Notifications already enabled ✅')
+    } else {
+      showToast('Please enable notifications in your browser settings.', 'info')
     }
   }
+
   const sendNativeNotification = (title, body) => {
     if (!("Notification" in window) || Notification.permission !== "granted") return
     try { new Notification(title, { body }) } catch (e) {}
   }
 
-  // --- PWA INSTALL ---
   useEffect(() => {
     const handler = (e) => {
       e.preventDefault()
@@ -450,7 +452,6 @@ function App() {
     showToast('💬 Answer marked correct! 50 Shillings credited!')
   }
 
-  // --- CALL LOGIC ---
   const initiateCall = async (type) => {
     if (!userProfile || !otherProfile) return showToast('Could not find the other user.', 'error');
     const roomName = `call_${Date.now()}_${Math.random().toString(36).substring(7)}`;
@@ -471,11 +472,8 @@ function App() {
   };
 
   const acceptCall = async (call) => {
-    // 1. Update status to connected
     await supabase.from('calls').update({ status: 'connected' }).eq('id', call.id);
-    // 2. Close the incoming popup
     setIncomingCall(null);
-    // 3. Open the video/audio call
     setCallType(call.type);
     setCallRoom(call.room_name);
   };
@@ -488,7 +486,6 @@ function App() {
 
   const endCall = async () => {
     if (callRoom) {
-      // Mark as ended in DB so the other person's app knows
       await supabase.from('calls').update({ status: 'ended' }).eq('room_name', callRoom);
     }
     setCallType(null);
@@ -496,10 +493,35 @@ function App() {
     navigateTo('home');
   };
 
+  // --- OPTIMISTIC CHAT SEND (INSTANTLY SHOWS ON YOUR SCREEN) ---
   const sendChatMessage = async () => {
     if (!chatInput.trim() || !userProfile) return
-    await supabase.from('chat_messages').insert({ sender_name: userProfile.name, message: chatInput })
-    setChatInput('')
+    
+    // Optimistic UI: Fake the message locally so it appears INSTANTLY
+    const tempId = `temp_${Date.now()}`;
+    const optimisticMsg = {
+      id: tempId,
+      sender_name: userProfile.name,
+      message: chatInput,
+      created_at: new Date().toISOString(),
+      is_read: false,
+      image_url: null,
+      edited_at: null
+    };
+    setMessages(prev => [...prev, optimisticMsg]);
+    setChatInput('');
+
+    // Send to DB
+    const { error } = await supabase.from('chat_messages').insert({
+      sender_name: userProfile.name,
+      message: chatInput
+    });
+
+    if (error) {
+      // Revert if DB fails
+      setMessages(prev => prev.filter(m => m.id !== tempId));
+      showToast('Failed to send message', 'error');
+    }
   }
 
   const fetchModes = async () => {
@@ -582,7 +604,6 @@ function App() {
     showToast(msg, 'success')
   }
 
-  // --- ANIMATED MODE COLORS ---
   const modeColors = {
     normal: { 
       bg: 'linear-gradient(135deg, #fff0f5, #f3e8ff, #ffebf0)', 
@@ -611,30 +632,24 @@ function App() {
   }
   const currentStyle = modeColors[currentMode] || modeColors.normal
 
-  // --- GLOBAL REALTIME (INSTANT SYNC & INCOMING CALL LISTENER) ---
+  // --- GLOBAL REALTIME LISTENER ---
   useEffect(() => {
     if (!userProfile) return;
 
     const tables = ['photos', 'plans', 'gifts', 'timeline', 'questions', 'answers', 'savings', 'chat_messages', 'family_modes'];
-    // Separate array for calls to handle special logic
+    
     const callChannel = supabase.channel('global_calls')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calls' }, payload => {
-        // If the call is for ME, and it's ringing
         if (payload.new.receiver_id === userProfile.id && payload.new.status === 'ringing') {
           setIncomingCall(payload.new);
           sendNativeNotification('📞 Incoming Call!', `${otherProfile?.name || 'Someone'} is calling you.`);
         }
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'calls' }, payload => {
-        // If I am the caller, and the call connects, the popup on my side should close (already handled by state), 
-        // but we need to ensure the receiver is connected.
-        if (payload.new.status === 'ended') {
-          // If the other person ended the call, hang up locally
-          if (callType) {
-            showToast('Call ended by the other party.', 'info');
-            setCallType(null);
-            setCallRoom(null);
-          }
+        if (payload.new.status === 'ended' && callType) {
+          showToast('Call ended by the other party.', 'info');
+          setCallType(null);
+          setCallRoom(null);
         }
       })
       .subscribe();
@@ -644,6 +659,12 @@ function App() {
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table }, payload => {
           if (table === 'chat_messages' && payload.new.sender_name !== userProfile.name) {
             sendNativeNotification('💬 New Message', `${payload.new.sender_name}: ${payload.new.message}`);
+            setMessages(prev => {
+              // Prevent duplicates if already added by Optimistic UI
+              const exists = prev.some(m => m.id === payload.new.id || (m.sender_name === payload.new.sender_name && m.message === payload.new.message && Math.abs(new Date(m.created_at) - new Date(payload.new.created_at)) < 2000));
+              if (exists) return prev;
+              return [...prev, payload.new];
+            });
           } else if (table === 'photos') sendNativeNotification('📸 Gallery Update', 'A new photo was added!');
           else if (table === 'plans') sendNativeNotification('📅 New Plan', `${payload.new.title} was created!`);
           else if (table === 'gifts' && payload.new.sender_id !== userProfile.id) sendNativeNotification('🎁 You received a gift!', 'Tap the Gifts tab to open it.');
@@ -660,9 +681,9 @@ function App() {
           const moduleKey = table === 'chat_messages' ? 'chat' : table === 'photos' ? 'gallery' : table === 'family_modes' ? null : table;
           if (moduleKey) {
             setUnreadCounts(prev => ({ ...prev, [moduleKey]: (prev[moduleKey] || 0) + 1 }));
-            // Force state update immediately so UI reflects change
-            if (table === 'chat_messages') setMessages(prev => [...prev, payload.new]);
-            else if (table === 'photos') setPhotos(prev => [payload.new, ...prev]);
+            
+            // Update specific state arrays instantly (excluding chat which is handled with duplicate prevention above)
+            if (table === 'photos') setPhotos(prev => [payload.new, ...prev]);
             else if (table === 'plans') setPlans(prev => [...prev, payload.new]);
             else if (table === 'gifts') setGifts(prev => [payload.new, ...prev]);
             else if (table === 'timeline') setTimelines(prev => [payload.new, ...prev]);
@@ -782,7 +803,7 @@ function App() {
     return (
       <VideoCall 
         audioOnly={callType === 'voice'} 
-        roomName={callRoom} // Pass the shared room name!
+        roomName={callRoom}
         onLeave={endCall} 
       />
     )
@@ -1186,11 +1207,10 @@ function App() {
     )
   }
 
-  // --- HOME DASHBOARD WITH MODE ANIMATIONS ---
+  // --- HOME DASHBOARD ---
   return (
     <div style={{fontFamily:'Inter, sans-serif', minHeight:'100vh', background: currentStyle.bg, padding:'2rem 1rem', transition:'background 1s ease-in-out, color 0.5s ease', animation: currentStyle.bgAnim}}>
       
-      {/* ANIMATION STYLES */}
       <style>
         {`
           @keyframes gradientShiftNormal {
@@ -1221,7 +1241,6 @@ function App() {
         `}
       </style>
 
-      {/* ROMANTIC MODE FLOATING HEARTS */}
       {currentMode === 'romantic' && (
         <div style={{position:'fixed', top:'10%', left:'10%', pointerEvents:'none', zIndex:0}}>
           <div style={{fontSize:'2rem', animation:'floatHearts 4s infinite'}}>❤️</div>
@@ -1230,7 +1249,6 @@ function App() {
         </div>
       )}
 
-      {/* SEXUAL MODE GLOW */}
       {currentMode === 'sexual' && (
         <div style={{position:'fixed', top:'0', left:'0', width:'100%', height:'100%', pointerEvents:'none', zIndex:0, background:'radial-gradient(circle, rgba(168,85,247,0.2) 0%, rgba(0,0,0,0.7) 100%)', animation:'pulseGlow 3s infinite alternate'}}></div>
       )}
@@ -1245,7 +1263,6 @@ function App() {
         </button>
       </div>
 
-      {/* INCOMING CALL POPUP OVERLAY */}
       {incomingCall && (
         <div style={{position:'fixed', inset:'0', background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:'9999', padding:'1rem'}}>
           <div style={{background:'white', padding:'2.5rem', borderRadius:'2rem', maxWidth:'400px', width:'100%', textAlign:'center', animation:'fadeIn 0.5s'}}>
@@ -1299,7 +1316,13 @@ function App() {
           )}
         </div>
 
-        {/* MODE SELECTION BUTTONS */}
+        {/* NOTIFICATION REQUEST BUTTON */}
+        <div style={{display:'flex', justifyContent:'center', marginBottom:'1.5rem'}}>
+          <button onClick={requestNotificationPermission} style={{background:'#1f2937', color:'white', padding:'0.5rem 1rem', borderRadius:'2rem', border:'none', fontWeight:'600', cursor:'pointer', fontSize:'0.9rem'}}>
+            🔔 Enable Notifications
+          </button>
+        </div>
+
         <div style={{display:'flex', flexWrap:'wrap', gap:'0.5rem', justifyContent:'center', marginBottom:'2rem', padding:'0.5rem', background:'rgba(255,255,255,0.4)', borderRadius:'2rem', backdropFilter:'blur(4px)'}}>
           <button onClick={() => requestMode('normal')} style={{flex:1, minWidth:'80px', padding:'0.5rem 1rem', borderRadius:'2rem', border:'none', fontWeight:'600', cursor:'pointer', background: currentMode === 'normal' ? '#4ade80' : 'white', color: currentMode === 'normal' ? 'white' : '#1f2937', boxShadow: currentMode === 'normal' ? '0 4px 12px rgba(74,222,128,0.4)' : 'none'}}>Normal 🟢</button>
           <button onClick={() => requestMode('romantic')} style={{flex:1, minWidth:'80px', padding:'0.5rem 1rem', borderRadius:'2rem', border:'none', fontWeight:'600', cursor:'pointer', background: currentMode === 'romantic' ? '#db2777' : 'white', color: currentMode === 'romantic' ? 'white' : '#1f2937', boxShadow: currentMode === 'romantic' ? '0 4px 12px rgba(219,39,119,0.4)' : 'none'}}>Romantic ❤️</button>
@@ -1307,7 +1330,6 @@ function App() {
           {currentMode !== 'normal' && <button onClick={endMode} style={{flex:1, minWidth:'80px', padding:'0.5rem 1rem', borderRadius:'2rem', border:'none', fontWeight:'600', cursor:'pointer', background:'#ef4444', color:'white'}}>End Mode ✕</button>}
         </div>
 
-        {/* PENDING APPROVAL POPUP */}
         {activeModeRequest && (
           <div style={{background:'rgba(255,255,255,0.95)', padding:'1rem', borderRadius:'1rem', marginBottom:'2rem', textAlign:'center', boxShadow:'0 4px 12px rgba(0,0,0,0.1)'}}>
             <p>{otherProfile?.name} wants to switch to <b>{activeModeRequest.mode}</b> mode.</p>
@@ -1318,7 +1340,6 @@ function App() {
           </div>
         )}
 
-        {/* HOME MENU CARDS */}
         <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(140px, 1fr))', gap:'1rem'}}>
           <MenuCard icon="📸" title="Gallery" action={() => navigateTo('gallery')} badge={unreadCounts.gallery} accent={currentStyle.accent} />
           <MenuCard icon="📖" title="History Tree" action={() => navigateTo('timeline')} badge={unreadCounts.timeline} accent={currentStyle.accent} />
