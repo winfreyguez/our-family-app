@@ -528,38 +528,46 @@ function App() {
           <div style={{width:'24px'}}></div>
         </div>
         <div style={{flex:1, overflowY:'auto', padding:'1rem 1.5rem', display:'flex', flexDirection:'column', gap:'0.5rem'}}>
-          {messages.map((msg) => {
-            const isMe = msg.sender_name === userProfile.name
-            return (
-              <div key={msg.id} style={{display:'flex', flexDirection:'column', alignItems: isMe ? 'flex-end' : 'flex-start', animation:'popIn 0.3s ease-out', position:'relative', maxWidth:'85%'}}>
-                <div style={{background: isMe ? 'linear-gradient(135deg, #f43f5e, #fb7185)' : 'linear-gradient(135deg, #8b5cf6, #a78bfa)', color:'white', padding:'0.75rem 1rem', borderRadius: isMe ? '1rem 1rem 0 1rem' : '1rem 1rem 1rem 0', boxShadow:'0 2px 8px rgba(244, 63, 94, 0.2)', minWidth:'50px'}}>
-                  {!isMe && <div style={{fontSize:'0.75rem', fontWeight:'600', marginBottom:'0.2rem', opacity:'0.9'}}>{msg.sender_name}</div>}
-                  {editingMsgId === msg.id ? (
-                    <div style={{display:'flex', gap:'0.5rem', marginTop:'0.5rem'}}>
-                      <input type="text" value={editingMsgText} onChange={(e) => setEditingMsgText(e.target.value)} style={{flex:1, padding:'0.5rem', borderRadius:'0.5rem', border:'none', outline:'none', background:'white', color:'#333'}} />
-                      <button onClick={() => saveEditChat(msg.id)} style={{background:'#10b981', border:'none', color:'white', padding:'0.25rem 0.75rem', borderRadius:'0.5rem', fontWeight:'bold', cursor:'pointer'}}>Save</button>
-                      <button onClick={() => setEditingMsgId(null)} style={{background:'#ef4444', border:'none', color:'white', padding:'0.25rem 0.75rem', borderRadius:'0.5rem', fontWeight:'bold', cursor:'pointer'}}>Cancel</button>
-                    </div>
-                  ) : (
-                    <div>
-                      {msg.image_url && <img src={msg.image_url} alt="sent" style={{maxWidth:'200px', borderRadius:'0.5rem', marginBottom:'0.5rem', display:'block'}} />}
-                      {msg.message && <div>{msg.message}</div>}
-                      {msg.edited_at && <div style={{fontSize:'0.6rem', opacity:'0.7'}}>(edited)</div>}
-                    </div>
-                  )}
+          {messages.length === 0 ? (
+            <div style={{display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100%', color:'#a78bfa', textAlign:'center', padding:'2rem'}}>
+              <div style={{fontSize:'4rem', marginBottom:'1rem'}}>💬</div>
+              <div style={{fontSize:'1.1rem', fontWeight:'500', marginBottom:'0.5rem', color:'#1f2937'}}>No messages yet</div>
+              <div style={{fontSize:'0.9rem'}}>Send your first message to start the conversation!</div>
+            </div>
+          ) : (
+            messages.map((msg) => {
+              const isMe = msg.sender_name === userProfile.name
+              return (
+                <div key={msg.id} style={{display:'flex', flexDirection:'column', alignItems: isMe ? 'flex-end' : 'flex-start', animation:'popIn 0.3s ease-out', position:'relative', maxWidth:'85%'}}>
+                  <div style={{background: isMe ? 'linear-gradient(135deg, #f43f5e, #fb7185)' : 'linear-gradient(135deg, #8b5cf6, #a78bfa)', color:'white', padding:'0.75rem 1rem', borderRadius: isMe ? '1rem 1rem 0 1rem' : '1rem 1rem 1rem 0', boxShadow:'0 2px 8px rgba(244, 63, 94, 0.2)', minWidth:'50px'}}>
+                    {!isMe && <div style={{fontSize:'0.75rem', fontWeight:'600', marginBottom:'0.2rem', opacity:'0.9'}}>{msg.sender_name}</div>}
+                    {editingMsgId === msg.id ? (
+                      <div style={{display:'flex', gap:'0.5rem', marginTop:'0.5rem'}}>
+                        <input type="text" value={editingMsgText} onChange={(e) => setEditingMsgText(e.target.value)} style={{flex:1, padding:'0.5rem', borderRadius:'0.5rem', border:'none', outline:'none', background:'white', color:'#333'}} />
+                        <button onClick={() => saveEditChat(msg.id)} style={{background:'#10b981', border:'none', color:'white', padding:'0.25rem 0.75rem', borderRadius:'0.5rem', fontWeight:'bold', cursor:'pointer'}}>Save</button>
+                        <button onClick={() => setEditingMsgId(null)} style={{background:'#ef4444', border:'none', color:'white', padding:'0.25rem 0.75rem', borderRadius:'0.5rem', fontWeight:'bold', cursor:'pointer'}}>Cancel</button>
+                      </div>
+                    ) : (
+                      <div>
+                        {msg.image_url && <img src={msg.image_url} alt="sent" style={{maxWidth:'200px', borderRadius:'0.5rem', marginBottom:'0.5rem', display:'block'}} />}
+                        {msg.message && <div>{msg.message}</div>}
+                        {msg.edited_at && <div style={{fontSize:'0.6rem', opacity:'0.7'}}>(edited)</div>}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{display:'flex', gap:'1rem', alignItems:'center', fontSize:'0.7rem', color:'#a78bfa', marginTop:'0.25rem', fontWeight:'500'}}>
+                    <span>{timeAgo(msg.created_at)}</span>
+                    {!editingMsgId && isMe && (
+                      <div style={{display:'flex', gap:'0.5rem'}}>
+                        <span onClick={() => startEditChat(msg)} style={{cursor:'pointer', fontWeight:'bold', color:'#f43f5e'}}>Edit</span>
+                        <span onClick={() => deleteChatMessage(msg.id)} style={{cursor:'pointer', fontWeight:'bold', color:'#ef4444'}}>Delete</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div style={{display:'flex', gap:'1rem', alignItems:'center', fontSize:'0.7rem', color:'#a78bfa', marginTop:'0.25rem', fontWeight:'500'}}>
-                  <span>{timeAgo(msg.created_at)}</span>
-                  {!editingMsgId && isMe && (
-                    <div style={{display:'flex', gap:'0.5rem'}}>
-                      <span onClick={() => startEditChat(msg)} style={{cursor:'pointer', fontWeight:'bold', color:'#f43f5e'}}>Edit</span>
-                      <span onClick={() => deleteChatMessage(msg.id)} style={{cursor:'pointer', fontWeight:'bold', color:'#ef4444'}}>Delete</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )
-          })}
+              )
+            })
+          )}
         </div>
         <div style={{background:'white', padding:'0.75rem 1rem', display:'flex', gap:'0.75rem', alignItems:'center', borderTop:'2px solid #fce4ec'}}>
           <input type="file" accept="image/*" onChange={uploadChatImage} style={{display:'none'}} id="chat_upload" />
@@ -827,10 +835,8 @@ function App() {
   return (
     <div style={{fontFamily:'Inter, sans-serif', minHeight:'100vh', background:'linear-gradient(135deg, #fff0f5, #f3e8ff, #ffebf0)', padding:'2rem 1rem'}}>
       
-      {/* NATIVE TOP HEADER */}
       <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'1rem 1rem 0.5rem 1rem', maxWidth:'800px', margin:'0 auto'}}>
         <div style={{fontWeight:'700', fontSize:'1.2rem', color:'#f43f5e', letterSpacing:'-0.5px'}}>Winfrey & George</div>
-        {/* INSTALL BUTTON */}
         <button 
           onClick={handleInstallClick} 
           style={{background:'transparent', border:'none', cursor:'pointer', display:'flex', alignItems:'center', gap:'0.3rem', fontWeight:'600', color:'#1f2937', padding:'0.3rem 0.8rem', borderRadius:'2rem', border:'1px solid #e5e7eb'}}
@@ -841,7 +847,6 @@ function App() {
         </button>
       </div>
 
-      {/* INSTALL MANUAL MODAL */}
       {showInstallModal && (
         <div style={{position:'fixed', inset:'0', background:'rgba(0,0,0,0.7)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:'9999', padding:'1rem'}}>
           <div style={{background:'white', padding:'2rem', borderRadius:'1.5rem', maxWidth:'380px', width:'100%', textAlign:'center'}}>
@@ -889,7 +894,7 @@ function App() {
 }
 
 const ViewWrapper = ({ title, children, goBack }) => (
-  <div style={{fontFamily:'Inter, sans-serif', minHeight:'100vh', background:'linear-gradient(135deg, #fff0f5, #f3e8ff, #ffebf0)', padding:'2rem 1rem', display:'flex', flexDirection:'column'}}>
+  <div style={{fontFamily:'Inter, sans-serif', minHeight:'100vh', background:'linear-gradient(135deg, #fff0f5, #f3e8ff, #ffebf0)', padding:'1.5rem 0.75rem', display:'flex', flexDirection:'column'}}>
     <div style={{maxWidth:'800px', margin:'0 auto', width:'100%'}}>
       <div style={{display:'flex', alignItems:'center', justifyContent:'center', padding:'0.5rem 0 1.5rem 0', position:'relative'}}>
         <button onClick={goBack} style={{background:'none', border:'none', fontSize:'1.4rem', cursor:'pointer', color:'#f43f5e', display:'flex', alignItems:'center', gap:'0.2rem', padding:'0.5rem', position:'absolute', left:'0', top:'0', fontWeight:'500'}}>
