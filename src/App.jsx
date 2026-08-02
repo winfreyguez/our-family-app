@@ -87,7 +87,6 @@ function App() {
   const navigateTo = (view) => {
     setHistoryStack(prev => [...prev, view])
     setCurrentView(view)
-    // Inject browser history state for hardware back button support
     window.history.pushState(null, '', window.location.pathname + '?view=' + view)
   }
   const goBack = () => {
@@ -100,7 +99,6 @@ function App() {
       setCurrentView('home')
     }
   }
-  // Listen for hardware back button
   useEffect(() => {
     const handlePopState = (e) => {
       e.preventDefault()
@@ -218,7 +216,6 @@ function App() {
     showToast(`Account created! Welcome, ${data.name}! 💕`)
   }
 
-  // --- UNREAD COUNTS ---
   const calculateUnread = (data, moduleKey) => {
     const lastRead = localStorage.getItem(`last_read_${moduleKey}`)
     if (!lastRead || data.length === 0) return 0
@@ -275,7 +272,6 @@ function App() {
     }
   }
 
-  // --- ACTIONS ---
   const uploadPhoto = async (e) => {
     const file = e.target.files[0]; if (!file) return
     setIsUploading(true)
@@ -452,9 +448,13 @@ function App() {
     showToast('💬 Answer marked correct! 50 Shillings credited!')
   }
 
-  // --- FAMILY MODES LOGIC (Romantic, Sexual, Normal) ---
+  const sendChatMessage = async () => {
+    if (!chatInput.trim() || !userProfile) return
+    await supabase.from('chat_messages').insert({ sender_name: userProfile.name, message: chatInput })
+    setChatInput('')
+  }
+
   const fetchModes = async () => {
-    // Get active mode or pending request
     const { data } = await supabase.from('family_modes').select('*').order('created_at', { ascending: false }).limit(1)
     if (data && data.length > 0) {
       const latest = data[0]
@@ -487,7 +487,6 @@ function App() {
   }
 
   const acceptMode = async (requestId, mode) => {
-    // Start the mode
     await supabase.from('family_modes').update({ status: 'active', started_at: new Date() }).eq('id', requestId)
     setActiveModeRequest(null)
     setCurrentMode(mode)
@@ -498,20 +497,19 @@ function App() {
   const endMode = async () => {
     if (currentMode === 'normal' || !modeStartTime) return showToast('You are already in Normal mode.', 'info')
 
-    // Only the requester can end mode? Or both? We'll let either end it.
     const durationSec = (new Date() - modeStartTime) / 1000
     const minutes = Math.ceil(durationSec / 60)
     let cost = 0
 
-    if (currentMode === 'sexual') {
-      cost = minutes * 2 // 2 shillings per minute
+    if (currentMode === 'romantic') {
+      cost = minutes * 4 // Romantic: 4 shillings per minute
+    } else if (currentMode === 'sexual') {
+      cost = minutes * 8 // Sexual: 8 shillings per minute
     }
 
     let msg = `Ended ${currentMode} mode.`
     let updatedWallet = userProfile.wallet
 
-    // If cost exists, deduct from the requester
-    // We can query the active mode to see who the requester was
     const { data: activeMode } = await supabase.from('family_modes').select('*').eq('status', 'active').single()
     if (activeMode && cost > 0) {
       const requesterId = activeMode.requester_id
@@ -519,14 +517,14 @@ function App() {
       if (reqProfile.wallet >= cost) {
         const newWallet = reqProfile.wallet - cost
         await supabase.from('profiles').update({ wallet: newWallet }).eq('id', requesterId)
-        await supabase.from('transactions').insert({ profile_id: requesterId, amount: -cost, type: 'Mode Fee', description: `Sexual Mode for ${minutes} mins` })
+        await supabase.from('transactions').insert({ profile_id: requesterId, amount: -cost, type: 'Mode Fee', description: `${currentMode} Mode for ${minutes} mins` })
         msg += ` You were charged ${cost} Shillings.`
         if (requesterId === userProfile.id) {
           updatedWallet = newWallet
         }
         setUserProfile(prev => ({ ...prev, wallet: updatedWallet }))
       } else {
-        showToast('Not enough funds to end sexual mode! Please boost wallet first.', 'error')
+        showToast('Not enough funds! Please boost wallet first.', 'error')
         return
       }
     }
@@ -541,7 +539,6 @@ function App() {
   useEffect(() => {
     if (!userProfile) return;
 
-    // Listen to all table events
     const tables = ['photos', 'plans', 'gifts', 'timeline', 'questions', 'answers', 'savings', 'chat_messages', 'family_modes'];
     const channels = tables.map(table => {
       return supabase.channel(`global_${table}`)
@@ -587,7 +584,6 @@ function App() {
   useEffect(() => { if (currentView === 'wallet') fetchTransactions() }, [currentView])
   useEffect(() => { if (currentView === 'savings') fetchSavings() }, [currentView])
 
-  // Fetch modes on load
   useEffect(() => { if (isLoggedIn) fetchModes() }, [isLoggedIn])
 
   // --- ONLINE STATUS ---
@@ -623,7 +619,6 @@ function App() {
     }
   }, [userProfile])
 
-  // --- READ RECEIPTS ---
   const markMessagesAsRead = async () => {
     if (!userProfile || messages.length === 0) return
     await supabase.from('chat_messages')
@@ -648,11 +643,29 @@ function App() {
 
   const startDate = new Date('2017-01-01'); const now = new Date(); const diffMs = now - startDate; const totalDays = Math.floor(diffMs / (1000 * 60 * 60 * 24)); const years = Math.floor(totalDays / 365); const remainingDays = totalDays % 365; const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
 
-  // --- MODE DYNAMIC STYLES ---
+  // --- DYNAMIC MODE COLORS FOR CHAT AND APP ---
   const modeColors = {
-    normal: { bg: 'linear-gradient(135deg, #fff0f5, #f3e8ff, #ffebf0)', accent: '#f43f5e', text: '#1f2937', card: 'rgba(255, 255, 255, 0.7)' },
-    romantic: { bg: 'linear-gradient(135deg, #ffe4e6, #ffc0cb, #db2777)', accent: '#be123c', text: '#4c0519', card: 'rgba(255, 255, 255, 0.5)' },
-    sexual: { bg: 'linear-gradient(135deg, #1f0933, #4c1d95, #6b21a8)', accent: '#a855f7', text: '#e9d5ff', card: 'rgba(0,0,0,0.3)' }
+    normal: { 
+      bg: 'linear-gradient(135deg, #fff0f5, #f3e8ff, #ffebf0)', 
+      accent: '#f43f5e', text: '#1f2937', card: 'rgba(255, 255, 255, 0.7)',
+      chatBg: 'linear-gradient(180deg, #fff0f5, #f3e8ff)',
+      chatMe: 'linear-gradient(135deg, #f43f5e, #fb7185)',
+      chatPartner: 'linear-gradient(135deg, #8b5cf6, #a78bfa)'
+    },
+    romantic: { 
+      bg: 'linear-gradient(135deg, #ffe4e6, #ffc0cb, #db2777)', 
+      accent: '#be123c', text: '#4c0519', card: 'rgba(255, 255, 255, 0.5)',
+      chatBg: 'linear-gradient(180deg, #ffe4e6, #fbcfe8)',
+      chatMe: 'linear-gradient(135deg, #be123c, #f472b6)',
+      chatPartner: 'linear-gradient(135deg, #f472b6, #fda4af)'
+    },
+    sexual: { 
+      bg: 'linear-gradient(135deg, #1f0933, #4c1d95, #6b21a8)', 
+      accent: '#a855f7', text: '#e9d5ff', card: 'rgba(0,0,0,0.3)',
+      chatBg: 'linear-gradient(180deg, #1f0933, #4c1d95)',
+      chatMe: 'linear-gradient(135deg, #a855f7, #c084fc)',
+      chatPartner: 'linear-gradient(135deg, #4c1d95, #7e22ce)'
+    }
   }
   const currentStyle = modeColors[currentMode] || modeColors.normal
 
@@ -768,12 +781,11 @@ function App() {
 
   if (currentView === 'chat') {
     return (
-      <div style={{fontFamily:'Inter, sans-serif', height:'100vh', display:'flex', flexDirection:'column', overflow:'hidden', background:'linear-gradient(180deg, #fff0f5, #f3e8ff)'}}>
+      <div style={{fontFamily:'Inter, sans-serif', height:'100vh', display:'flex', flexDirection:'column', overflow:'hidden', background: currentStyle.chatBg, transition:'background 0.8s ease-in-out'}}>
         <div style={{background:'linear-gradient(135deg, #f43f5e, #a78bfa)', color:'white', padding:'1rem 1.5rem', display:'flex', justifyContent:'space-between', alignItems:'center', boxShadow:'0 2px 4px rgba(0,0,0,0.1)'}}>
           <button onClick={goBack} style={{background:'none', border:'none', color:'white', fontSize:'1.2rem', cursor:'pointer'}}>←</button>
           <div style={{fontWeight:'700', fontSize:'1.1rem', textAlign:'center'}}>
             💞 Winfrey & George
-            {/* ONLINE STATUS IN CHAT HEADER */}
             {otherProfile && (
               <div style={{fontSize:'0.7rem', fontWeight:'400', display:'flex', alignItems:'center', justifyContent:'center', gap:'0.3rem', marginTop:'0.1rem'}}>
                 <div style={{width:'8px', height:'8px', borderRadius:'50%', background: otherProfile.is_online ? '#10b981' : '#9ca3af'}}></div>
@@ -795,7 +807,7 @@ function App() {
               const isMe = msg.sender_name === userProfile.name
               return (
                 <div key={msg.id} style={{display:'flex', flexDirection:'column', alignItems: isMe ? 'flex-end' : 'flex-start', animation:'popIn 0.3s ease-out', position:'relative', maxWidth:'85%'}}>
-                  <div style={{background: isMe ? 'linear-gradient(135deg, #f43f5e, #fb7185)' : 'linear-gradient(135deg, #8b5cf6, #a78bfa)', color:'white', padding:'0.75rem 1rem', borderRadius: isMe ? '1rem 1rem 0 1rem' : '1rem 1rem 1rem 0', boxShadow:'0 2px 8px rgba(244, 63, 94, 0.2)', minWidth:'50px'}}>
+                  <div style={{background: isMe ? currentStyle.chatMe : currentStyle.chatPartner, color:'white', padding:'0.75rem 1rem', borderRadius: isMe ? '1rem 1rem 0 1rem' : '1rem 1rem 1rem 0', boxShadow:'0 2px 8px rgba(244, 63, 94, 0.2)', minWidth:'50px', transition:'background 0.8s ease-in-out'}}>
                     {!isMe && <div style={{fontSize:'0.75rem', fontWeight:'600', marginBottom:'0.2rem', opacity:'0.9'}}>{msg.sender_name}</div>}
                     {editingMsgId === msg.id ? (
                       <div style={{display:'flex', gap:'0.5rem', marginTop:'0.5rem'}}>
