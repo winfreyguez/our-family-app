@@ -171,8 +171,8 @@ function App() {
         <button onClick={fetchRandomQuestion} style={{background:'#f43f5e', color:'white', padding:'0.75rem 2rem', border:'none', borderRadius:'2rem', fontSize:'1rem', fontWeight:'600', cursor:'pointer', marginBottom:'2rem', boxShadow:'0 4px 8px rgba(244, 63, 94, 0.2)'}}>Surprise Me! ✨</button>
         {currentQuestion ? (
           <div style={{background:'white', padding:'2rem', borderRadius:'1.5rem', boxShadow:'0 8px 20px rgba(0,0,0,0.05)', maxWidth:'600px', margin:'0 auto'}}>
-            {/* ABSOLUTELY PARSER-SAFE TEMPLATE LITERAL */}
-            <p style={{fontSize:'1.2rem', fontWeight:'600', color:'#1f2937', marginBottom:'1.5rem', lineHeight:'1.6'}> {`"${currentQuestion.text}"`} </p>
+            {/* BULLETPROOF QUOTE RENDERING - NO BACKTICKS, NO PLUS SIGNS */}
+            <p style={{fontSize:'1.2rem', fontWeight:'600', color:'#1f2937', marginBottom:'1.5rem', lineHeight:'1.6'}}> {"\""}{currentQuestion.text}{"\""} </p>
             <div style={{display:'flex', gap:'0.5rem', marginBottom:'1.5rem'}}>
               <input type="text" placeholder="Write your memory..." value={answerText} onChange={(e) => setAnswerText(e.target.value)} style={{flex:'1', padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none'}} />
               <button onClick={submitAnswer} style={{background:'#1f2937', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', cursor:'pointer', fontWeight:'600'}}>Reply</button>
