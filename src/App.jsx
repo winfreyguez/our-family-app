@@ -2,12 +2,10 @@ import { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
 import ParticleGift from './ParticleGift'
 
-// --- APP CONFIG ---
-const START_DATE = new Date('2024-01-01') 
+const START_DATE = new Date('2024-01-01') // Change to your actual anniversary!
 const CORRECT_PIN = '1212'
 const GIFT_EMOJIS = ['❤️', '🌹', '🌟', '💌', '🎉', '💝', '🌺', '✨']
 
-// --- HELPERS ---
 const timeAgo = (dateString) => {
   const date = new Date(dateString)
   const now = new Date()
@@ -35,7 +33,6 @@ function App() {
   const [pin, setPin] = useState('')
   const [currentView, setCurrentView] = useState('home')
   const [toast, setToast] = useState(null)
-  const [loading, setLoading] = useState(false)
   
   const [photos, setPhotos] = useState([])
   const [plans, setPlans] = useState([])
@@ -48,7 +45,7 @@ function App() {
   const [planTitle, setPlanTitle] = useState('')
   const [planDate, setPlanDate] = useState('')
   const [giftMsg, setGiftMsg] = useState('')
-  const [giftType, setGiftType] = useState('Custom Message') // NEW: Gift Type
+  const [giftType, setGiftType] = useState('Custom Message')
   const [isUploading, setIsUploading] = useState(false)
   const [tlTitle, setTlTitle] = useState('')
   const [tlDesc, setTlDesc] = useState('')
@@ -73,7 +70,7 @@ function App() {
     else { showToast('Wrong PIN!', 'error'); setPin('') }
   }
 
-  // --- FETCH FUNCTIONS ---
+  // --- FETCHING ---
   const fetchPhotos = async () => {
     const { data } = await supabase.from('photos').select('*').order('created_at', { ascending: false })
     if (data) setPhotos(data)
@@ -135,7 +132,6 @@ function App() {
     await supabase.from('plans').delete().eq('id', id); fetchPlans(); showToast('Plan deleted')
   }
 
-  // --- LUXURY GIFTS UPDATE ---
   const sendGift = async () => {
     if (!giftMsg) return showToast('Write a message!', 'error')
     let prefix = '';
@@ -153,7 +149,6 @@ function App() {
     await supabase.from('gifts').insert({ message: `${prefix}${emoji} ${giftMsg}` })
     setGiftMsg(''); fetchGifts(); showToast(`Gift sent! ${emoji}`)
   }
-  
   const sendHeartGift = async () => {
     const emoji = '❤️'
     await supabase.from('gifts').insert({ message: `${emoji} I Love You 💕` })
@@ -195,26 +190,85 @@ function App() {
     setReplyText(''); setReplyingTo(null); fetchQuestions(); showToast('Reply sent! 💬')
   }
 
-  // --- EFFECTS ---
-  useEffect(() => { if (currentView === 'gallery') fetchPhotos() }, [currentView])
-  useEffect(() => { if (currentView === 'plans') fetchPlans() }, [currentView])
-  useEffect(() => { if (currentView === 'gifts') fetchGifts() }, [currentView])
-  useEffect(() => { if (currentView === 'timeline') fetchTimeline() }, [currentView])
-  useEffect(() => { if (currentView === 'questions') fetchQuestions() }, [currentView])
-
-  // Realtime Chat & Timeline Effect (Instant updates!)
+  // --- REALTIME SUBSCRIPTIONS FOR ALL FEATURES ---
+  // Chat Realtime
   useEffect(() => {
     if (currentView === 'chat') {
       fetchChatMessages()
       const channel = supabase.channel('chat_messages')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, payload => {
-          setMessages(prev => [...prev, payload.new])
-        })
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, payload => setMessages(prev => [...prev, payload.new]))
         .subscribe()
-      return () => { supabase.removeChannel(channel) }
+      return () => supabase.removeChannel(channel)
     }
   }, [currentView])
 
+  // Gallery Realtime
+  useEffect(() => {
+    if (currentView === 'gallery') {
+      fetchPhotos()
+      const channel = supabase.channel('photos')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'photos' }, payload => setPhotos(prev => [payload.new, ...prev]))
+        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'photos' }, payload => setPhotos(prev => prev.filter(p => p.id !== payload.old.id)))
+        .subscribe()
+      return () => supabase.removeChannel(channel)
+    }
+  }, [currentView])
+
+  // Plans Realtime
+  useEffect(() => {
+    if (currentView === 'plans') {
+      fetchPlans()
+      const channel = supabase.channel('plans')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'plans' }, payload => setPlans(prev => [...prev, payload.new]))
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'plans' }, payload => setPlans(prev => prev.map(p => p.id === payload.new.id ? payload.new : p)))
+        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'plans' }, payload => setPlans(prev => prev.filter(p => p.id !== payload.old.id)))
+        .subscribe()
+      return () => supabase.removeChannel(channel)
+    }
+  }, [currentView])
+
+  // Gifts Realtime
+  useEffect(() => {
+    if (currentView === 'gifts') {
+      fetchGifts()
+      const channel = supabase.channel('gifts')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'gifts' }, payload => setGifts(prev => [payload.new, ...prev]))
+        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'gifts' }, payload => setGifts(prev => prev.filter(g => g.id !== payload.old.id)))
+        .subscribe()
+      return () => supabase.removeChannel(channel)
+    }
+  }, [currentView])
+
+  // History Tree (Timeline) Realtime
+  useEffect(() => {
+    if (currentView === 'timeline') {
+      fetchTimeline()
+      const channel = supabase.channel('timeline')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'timeline' }, payload => setTimelines(prev => [payload.new, ...prev]))
+        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'timeline' }, payload => setTimelines(prev => prev.filter(t => t.id !== payload.old.id)))
+        .subscribe()
+      return () => supabase.removeChannel(channel)
+    }
+  }, [currentView])
+
+  // Question Inbox Realtime
+  useEffect(() => {
+    if (currentView === 'questions') {
+      fetchQuestions()
+      const channel = supabase.channel('questions')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'questions' }, payload => { setQuestions(prev => [payload.new, ...prev]); fetchQuestions(); })
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'answers' }, payload => {
+          setAnswers(prev => {
+            const qId = payload.new.question_id;
+            return { ...prev, [qId]: [...(prev[qId] || []), payload.new] };
+          });
+        })
+        .subscribe()
+      return () => supabase.removeChannel(channel)
+    }
+  }, [currentView])
+
+  // --- DAYS ---
   const daysTogether = Math.floor((new Date() - START_DATE) / (1000 * 60 * 60 * 24))
 
   // --- LOGIN ---
@@ -385,8 +439,6 @@ function App() {
     return (
       <ViewWrapper title="🎁 Gifts" goHome={() => setCurrentView('home')}>
         <div style={{display:'flex', flexWrap:'wrap', gap:'0.75rem', justifyContent:'center', marginBottom:'2rem'}}>
-          
-          {/* New Gift Type Selector */}
           <select value={giftType} onChange={(e) => setGiftType(e.target.value)} style={{padding:'0.75rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none', background:'white'}}>
             <option value="Custom Message">Custom Message ✨</option>
             <option value="Jewelry">💍 Jewelry</option>
@@ -395,7 +447,6 @@ function App() {
             <option value="Spa Package">🧖 Spa Package</option>
             <option value="Digital Gift Card">💳 Digital Gift Card</option>
           </select>
-
           <input type="text" placeholder="Write a sweet message..." value={giftMsg} onChange={(e) => setGiftMsg(e.target.value)} style={{flex:'1', padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none', minWidth:'150px'}} />
           <button onClick={sendGift} style={{background:'#f43f5e', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer'}}>Send Gift ✨</button>
           <button onClick={sendHeartGift} style={{background:'#00d2ff', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer', boxShadow:'0 4px 12px rgba(0,210,255,0.4)'}}>Send ❤️ I Love You</button>
@@ -445,7 +496,6 @@ function App() {
   )
 }
 
-// --- COMPONENTS ---
 const ViewWrapper = ({ title, children, goHome }) => (
   <div style={{fontFamily:'"Inter", sans-serif', minHeight:'100vh', background:'#fff0f5', padding:'2rem 1rem', textAlign:'center'}}>
     <div style={{maxWidth:'800px', margin:'0 auto'}}>
