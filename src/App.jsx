@@ -708,4 +708,77 @@ function App() {
             <b style={{textAlign:'right', minWidth:'80px'}}>Amount</b>
           </div>
           {transactions.length === 0 ? <p style={{textAlign:'center', color:'#9ca3af', padding:'2rem 0'}}>No transactions yet.</p> : (
-            transactions
+            transactions.map(t => (
+              <div key={t.id} style={{display:'flex', justifyContent:'space-between', padding:'0.5rem 0', borderBottom:'1px solid #f3f4f6'}}>
+                <div>
+                  <div style={{fontWeight:'500', fontSize:'0.9rem'}}>{t.description}</div>
+                  <div style={{fontSize:'0.75rem', color:'#6b7280'}}>{t.type} • {timeAgo(t.created_at)}</div>
+                </div>
+                <div style={{fontWeight:'bold', color: t.amount > 0 ? '#10b981' : '#ef4444', fontSize:'1rem'}}>
+                  {t.amount > 0 ? `+${t.amount}` : t.amount}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </ViewWrapper>
+    )
+  }
+
+  // --- FAMILY HUB (HOME) ---
+  return (
+    <div style={{fontFamily:'"Inter", sans-serif', minHeight:'100vh', background:'linear-gradient(135deg, #fff0f5 0%, #f3e8ff 50%, #ffebf0 100%)', padding:'2rem 1rem'}}>
+      <div style={{maxWidth:'800px', margin:'0 auto'}}>
+        <div style={{background:'rgba(255, 255, 255, 0.7)', backdropFilter:'blur(16px)', borderRadius:'2rem', padding:'3rem 2rem', boxShadow:'0 20px 40px rgba(244, 63, 94, 0.15), inset 0 0 0 1px rgba(255,255,255,0.6)', textAlign:'center', marginBottom:'2rem', border:'1px solid rgba(255,255,255,0.5)'}}>
+          <div style={{fontSize:'4rem', marginBottom:'0.5rem', animation:'heartBeat 1.5s infinite'}}>💕</div>
+          <h1 style={{background:'linear-gradient(135deg, #f43f5e, #8b5cf6)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', fontSize:'2.5rem', fontWeight:'700', marginBottom:'0.5rem'}}>Winfrey & George</h1>
+          <div style={{fontSize:'1.1rem', color:'#6b7280', background:'#fce4ec', padding:'0.5rem 1.5rem', borderRadius:'2rem', display:'inline-block'}}>
+            <span style={{fontWeight:'600', color:'#f43f5e'}}>{years}</span> Years, <span style={{fontWeight:'600', color:'#f43f5e'}}>{remainingDays}</span> Days, <span style={{fontWeight:'600', color:'#f43f5e'}}>{hours}</span> Hours 💫
+          </div>
+        </div>
+
+        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(140px, 1fr))', gap:'1rem'}}>
+          <MenuCard icon="📸" title="Gallery" action={() => setCurrentView('gallery')} />
+          <MenuCard icon="📖" title="History Tree" action={() => setCurrentView('timeline')} />
+          <MenuCard icon="📥" title="Inbox" action={() => setCurrentView('questions')} />
+          <MenuCard icon="💬" title="Chat" action={() => setCurrentView('chat')} />
+          <MenuCard icon="📅" title="Plans" action={() => setCurrentView('plans')} />
+          <MenuCard icon="🎁" title="Gifts" action={() => setCurrentView('gifts')} />
+        </div>
+        
+        <button onClick={() => setIsLoggedIn(false)} style={{display:'block', margin:'3rem auto 0', background:'linear-gradient(135deg, #1f2937, #4b5563)', color:'white', padding:'0.75rem 2.5rem', border:'none', borderRadius:'2rem', fontSize:'0.95rem', cursor:'pointer', fontWeight:'500', boxShadow:'0 4px 12px rgba(0,0,0,0.1)'}}>Log Out</button>
+      </div>
+      {toast && (
+        <div style={{position:'fixed', bottom:'2rem', left:'50%', transform:'translateX(-50%)', background: toast.type === 'error' ? '#ef4444' : '#22c55e', color:'white', padding:'1rem 2rem', borderRadius:'2rem', boxShadow:'0 10px 25px rgba(0,0,0,0.15)', fontWeight:'500', zIndex:1000, animation:'fadeIn 0.3s'}}>{toast.message}</div>
+      )}
+      <style>{`
+        @keyframes heartBeat {
+          0% { transform: scale(1); }
+          14% { transform: scale(1.3); }
+          28% { transform: scale(1); }
+          42% { transform: scale(1.3); }
+          70% { transform: scale(1); }
+        }
+      `}</style>
+    </div>
+  )
+}
+
+const ViewWrapper = ({ title, children, goHome }) => (
+  <div style={{fontFamily:'"Inter", sans-serif', minHeight:'100vh', background:'linear-gradient(135deg, #fff0f5 0%, #f3e8ff 50%, #ffebf0 100%)', padding:'2rem 1rem', textAlign:'center'}}>
+    <div style={{maxWidth:'800px', margin:'0 auto'}}>
+      <button onClick={goHome} style={{background:'none', border:'none', fontSize:'1.2rem', cursor:'pointer', color:'#f43f5e', marginBottom:'1.5rem', fontWeight:'600', display:'flex', alignItems:'center', gap:'0.5rem', transition:'0.2s'}} onMouseOver={(e) => e.target.style.transform='translateX(-4px)'} onMouseOut={(e) => e.target.style.transform='translateX(0)'}>← Back</button>
+      <h2 style={{background:'linear-gradient(135deg, #1f2937, #4b5563)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', fontSize:'2rem', fontWeight:'700', marginBottom:'2rem', display:'inline-block'}}>{title}</h2>
+      {children}
+    </div>
+  </div>
+)
+
+const MenuCard = ({ icon, title, action }) => (
+  <div onClick={action} style={{background:'white', padding:'2rem 1rem', borderRadius:'1.5rem', boxShadow:'0 4px 12px rgba(0,0,0,0.05)', textAlign:'center', cursor:'pointer', transition:'all 0.2s', border:'2px solid transparent'}} onMouseOver={(e) => {e.target.style.transform='translateY(-4px)'; e.target.style.borderColor='#f43f5e';}} onMouseOut={(e) => {e.target.style.transform='translateY(0)'; e.target.style.borderColor='transparent';}}>
+    <div style={{fontSize:'2.5rem', marginBottom:'0.5rem'}}>{icon}</div>
+    <div style={{fontWeight:'600', color:'#1f2937'}}>{title}</div>
+  </div>
+)
+
+export default App
