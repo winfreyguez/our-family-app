@@ -6,14 +6,16 @@ function App() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
 
-  useEffect(() => { 
-    supabase.auth.getSession().then(({ data }) => setUser(data.session?.user || null)) 
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setUser(data.session?.user || null))
   }, [])
 
   const login = async (e) => {
     e.preventDefault()
     const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) alert('Wrong email/password!')
+    if (error) {
+      alert('Wrong email/password!')
+    }
   }
 
   const signUp = async (e) => {
@@ -21,9 +23,9 @@ function App() {
     const { error } = await supabase.auth.signUp({ email, password })
     if (error) {
       alert(error.message)
-      return  // This stops the code safely if there's an error
+    } else {
+      alert('Account created! Check email to confirm.')
     }
-    alert('Account created! Check email to confirm.')
   }
 
   if (!user) {
@@ -48,5 +50,4 @@ function App() {
     </div>
   )
 }
-
 export default App
