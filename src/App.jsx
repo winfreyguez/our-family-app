@@ -79,11 +79,11 @@ function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [pin, setPin] = useState('')
   const [loginMode, setLoginMode] = useState('login') 
-  const [signupName, setSignupName] = useState('')
+  // SIGNUP STATE (Locked to Winfrey/Rodriguez)
+  const [signupName, setSignupName] = useState('Winfrey') 
   const [signupPin, setSignupPin] = useState('')
   const [userProfile, setUserProfile] = useState(null)
 
-  // --- DELETE ACCOUNT STATE ---
   const [showDeleteModal, setShowDeleteModal] = useState(false)
 
   const [unreadCounts, setUnreadCounts] = useState({
@@ -226,19 +226,30 @@ function App() {
     }
   }
 
+  // --- LOCKED SIGNUP: NAME MUST BE WINFREY OR RODRIGUEZ ---
   const handleSignup = async (e) => {
     e.preventDefault()
-    if (!signupName || !signupPin || signupPin.length !== 4) return showToast('Enter a name and 4-digit PIN!', 'error')
+    // 1. Validate Name
+    if (signupName !== 'Winfrey' && signupName !== 'Rodriguez') {
+      return showToast('You must choose between Winfrey and Rodriguez.', 'error');
+    }
+    // 2. Validate PIN
+    if (!signupPin || signupPin.length !== 4) return showToast('Enter a 4-digit PIN!', 'error')
+    
+    // 3. Check if PIN already exists (unique secret)
     const { data: existing } = await supabase.from('profiles').select('id').eq('pin', signupPin).maybeSingle()
     if (existing) return showToast('PIN already taken! Choose another.', 'error')
+    
+    // 4. Create Account
     const { data, error } = await supabase.from('profiles').insert({ name: signupName, pin: signupPin }).select().single()
     if (error) return showToast('Error creating account', 'error')
-    setUserProfile(data); setIsLoggedIn(true); setSignupName(''); setSignupPin('')
+    
+    setUserProfile(data); setIsLoggedIn(true); setSignupName('Winfrey'); setSignupPin('')
     requestNotificationPermission()
     showToast(`Account created! Welcome, ${data.name}! 💕`)
   }
 
-  // --- PERMANENT ACCOUNT DELETION LOGIC ---
+  // --- DELETE ACCOUNT LOGIC ---
   const handleDeleteAccount = async () => {
     if (!userProfile) return;
     const id = userProfile.id;
@@ -246,31 +257,21 @@ function App() {
 
     try {
       showToast('Deleting account...', 'info');
-      // 1. Delete Chat Messages (linked by sender_name)
       await supabase.from('chat_messages').delete().eq('sender_name', name);
-      // 2. Delete Gifts (linked by sender_id or receiver_id)
       await supabase.from('gifts').delete().or(`sender_id.eq.${id},receiver_id.eq.${id}`);
-      // 3. Delete Savings
       await supabase.from('savings').delete().eq('profile_id', id);
-      // 4. Delete Transactions
       await supabase.from('transactions').delete().eq('profile_id', id);
-      // 5. Delete Answers
       await supabase.from('answers').delete().eq('profile_id', id);
-      // 6. Delete Questions
       await supabase.from('questions').delete().eq('profile_id', id);
-      // 7. Delete Family Modes
       await supabase.from('family_modes').delete().or(`requester_id.eq.${id},accepter_id.eq.${id}`);
-      // 8. Delete Calls
       await supabase.from('calls').delete().or(`caller_id.eq.${id},receiver_id.eq.${id}`);
-      // 9. Delete the Profile itself
       await supabase.from('profiles').delete().eq('id', id);
 
-      // 10. Clean up local state
       setIsLoggedIn(false);
       setUserProfile(null);
       setOtherProfile(null);
       setShowDeleteModal(false);
-      localStorage.removeItem(`last_read_`); // Remove unread timestamps
+      localStorage.removeItem(`last_read_`);
       showToast('Account permanently deleted. 💔', 'error');
     } catch (err) {
       showToast('Error deleting account.', 'error');
@@ -815,7 +816,7 @@ function App() {
 
   const startDate = new Date('2017-01-01'); const now = new Date(); const diffMs = now - startDate; const totalDays = Math.floor(diffMs / (1000 * 60 * 60 * 24)); const years = Math.floor(totalDays / 365); const remainingDays = totalDays % 365; const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
 
-  // --- LOGIN ---
+  // --- LOGIN & SIGNUP ---
   if (!isLoggedIn) {
     return (
       <div style={{display:'flex', justifyContent:'center', alignItems:'center', height:'100vh', background:'linear-gradient(135deg, #fce4ec 0%, #f3e8ff 50%, #e0f2fe 100%)', fontFamily:'Inter, sans-serif'}}>
@@ -832,7 +833,10 @@ function App() {
           ) : (
             <form onSubmit={handleSignup}>
               <p style={{color:'#6b7280', fontSize:'0.9rem', marginBottom:'1rem'}}>Choose your Name & PIN</p>
-              <input type="text" placeholder="Your Name..." value={signupName} onChange={(e) => setSignupName(e.target.value)} style={{width:'100%', padding:'0.75rem 1rem', border:'2px solid #fce4ec', borderRadius:'0.75rem', outline:'none', marginBottom:'0.75rem'}} />
+              <select value={signupName} onChange={(e) => setSignupName(e.target.value)} style={{width:'100%', padding:'0.75rem 1rem', border:'2px solid #fce4ec', borderRadius:'0.75rem', outline:'none', marginBottom:'0.75rem', background:'white', fontSize:'1rem'}}>
+                <option value="Winfrey">Winfrey</option>
+                <option value="Rodriguez">Rodriguez</option>
+              </select>
               <input type="password" placeholder="4-Digit PIN..." maxLength="4" value={signupPin} onChange={(e) => setSignupPin(e.target.value)} style={{width:'100%', padding:'0.75rem 1rem', border:'2px solid #fce4ec', borderRadius:'0.75rem', outline:'none', marginBottom:'1.5rem', letterSpacing:'5px'}} />
               <button type="submit" style={{width:'100%', background:'linear-gradient(135deg, #8b5cf6, #a78bfa)', color:'white', padding:'1rem', border:'none', borderRadius:'1rem', fontSize:'1rem', fontWeight:'600', cursor:'pointer', boxShadow:'0 4px 12px rgba(139, 92, 246, 0.3)'}}>Create Account 💖</button>
               <p style={{marginTop:'1rem', fontSize:'0.85rem', color:'#6b7280'}}>Already have an account? <span onClick={() => setLoginMode('login')} style={{color:'#f43f5e', fontWeight:'600', cursor:'pointer'}}>Sign In</span></p>
