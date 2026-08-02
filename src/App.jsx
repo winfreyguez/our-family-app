@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
 import ParticleGift from './ParticleGift'
-import VideoCall from './VideoCall' // Import the new Video Call component
+import VideoCall from './VideoCall'
 
 // --- GIFTS CATALOG ---
 const LIVELY_GIFTS = [
@@ -38,6 +38,7 @@ const LIVELY_GIFTS = [
 ]
 
 const timeAgo = (dateString) => {
+  if (!dateString) return 'Just now'
   const date = new Date(dateString)
   const now = new Date()
   const seconds = Math.floor((now - date) / 1000)
@@ -66,6 +67,9 @@ function App() {
   const [signupName, setSignupName] = useState('')
   const [signupPin, setSignupPin] = useState('')
   const [userProfile, setUserProfile] = useState(null)
+
+  // --- OTHER PROFILE (for Online/Offline) ---
+  const [otherProfile, setOtherProfile] = useState(null)
 
   const [deferredPrompt, setDeferredPrompt] = useState(null)
   const [showInstallModal, setShowInstallModal] = useState(false)
@@ -409,7 +413,58 @@ function App() {
   useEffect(() => { if (currentView === 'wallet') fetchTransactions() }, [currentView])
   useEffect(() => { if (currentView === 'savings') fetchSavings() }, [currentView])
 
-  // Realtime Effects
+  // --- ONLINE STATUS & LAST SEEN LOGIC ---
+  // 1. Fetch and Subscribe to the Other Profile
+  useEffect(() => {
+    if (!userProfile) return
+    const fetchOther = async () => {
+      const { data } = await supabase.from('profiles').select('*').neq('id', userProfile.id).single()
+      if (data) setOtherProfile(data)
+    }
+    fetchOther()
+
+    const channel = supabase.channel('profiles')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, payload => {
+        if (payload.new.id !== userProfile.id) setOtherProfile(payload.new)
+      })
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [userProfile])
+
+  // 2. Update Current User's Online Status
+  useEffect(() => {
+    if (!userProfile) return
+    const setStatus = async (isOnline) => {
+      await supabase.from('profiles').update({ 
+        is_online: isOnline, 
+        last_seen: isOnline ? null : new Date() 
+      }).eq('id', userProfile.id)
+    }
+    setStatus(true) // Mark online on load
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') setStatus(true)
+      else setStatus(false)
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      setStatus(false) // Mark offline on component unmount (closing app)
+    }
+  }, [userProfile])
+
+  // --- READ RECEIPT LOGIC ---
+  const markMessagesAsRead = async () => {
+    if (!userProfile || messages.length === 0) return
+    // Update all messages where the sender is NOT the current user, and is_read is false
+    await supabase.from('chat_messages')
+      .update({ is_read: true })
+      .neq('sender_name', userProfile.name)
+      .eq('is_read', false)
+  }
+
+  // --- REALTIME EFFECTS ---
   useEffect(() => {
     if (currentView === 'chat') {
       fetchChatMessages()
@@ -418,9 +473,13 @@ function App() {
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chat_messages' }, payload => setMessages(prev => prev.map(m => m.id === payload.new.id ? payload.new : m)))
         .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'chat_messages' }, payload => setMessages(prev => prev.filter(m => m.id !== payload.old.id)))
         .subscribe()
+      
+      // Mark messages as read when viewing the chat
+      setTimeout(() => markMessagesAsRead(), 500)
       return () => supabase.removeChannel(channel)
     }
   }, [currentView])
+
   useEffect(() => {
     if (currentView === 'gifts') {
       const gChannel = supabase.channel('gifts')
@@ -496,7 +555,6 @@ function App() {
                   <div style={{flex:1}}>
                     {isVideo ? <video src={p.storage_path} controls style={{width:'100%', height:'100%', objectFit:'cover'}} /> : <img src={p.storage_path} alt="memory" style={{width:'100%', height:'100%', objectFit:'cover'}} onError={(e) => { e.target.src = 'https://placehold.co/160x160/fce4ec/f43f5e?text=❤️'; }} />}
                   </div>
-                  {/* IMAGE DOWNLOAD BUTTON */}
                   <a href={p.storage_path} download={`family_memory_${p.id}`} style={{textDecoration:'none'}}>
                     <div style={{background:'rgba(0,0,0,0.7)', color:'white', padding:'0.5rem', textAlign:'center', fontWeight:'600', fontSize:'0.8rem', cursor:'pointer', borderTop:'1px solid rgba(255,255,255,0.1)'}}>⬇️ Download</div>
                   </a>
@@ -589,6 +647,13 @@ function App() {
                       </div>
                     )}
                   </div>
+                  
+                  {/* READ RECEIPT INDICATOR */}
+                  {isMe && (
+                    <div style={{fontSize:'0.65rem', color: msg.is_read ? '#10b981' : '#9ca3af', marginTop:'2px', marginRight:'4px', alignSelf:'flex-end'}}>
+                      {msg.is_read ? '👁️ Read' : '✓ Sent'}
+                    </div>
+                  )}
                 </div>
               )
             })
@@ -894,6 +959,25 @@ function App() {
           <div style={{fontSize:'1.1rem', color:'#6b7280', background:'#fce4ec', padding:'0.5rem 1.5rem', borderRadius:'2rem', display:'inline-block'}}>
             <span style={{fontWeight:'600', color:'#f43f5e'}}>{years}</span> Years, <span style={{fontWeight:'600', color:'#f43f5e'}}>{remainingDays}</span> Days, <span style={{fontWeight:'600', color:'#f43f5e'}}>{hours}</span> Hours 💫
           </div>
+          
+          {/* ONLINE STATUS OF YOUR PARTNER */}
+          {otherProfile && (
+            <div style={{marginTop:'1rem', fontSize:'0.95rem', display:'flex', justifyContent:'center', alignItems:'center', gap:'0.5rem'}}>
+              <div style={{
+                width: '10px',
+                height: '10px',
+                borderRadius: '50%',
+                background: otherProfile.is_online ? '#10b981' : '#9ca3af',
+                display: 'inline-block'
+              }}></div>
+              <span>
+                {otherProfile.is_online 
+                  ? `${otherProfile.name} is Online 🟢` 
+                  : `${otherProfile.name} was last seen ${timeAgo(otherProfile.last_seen)}`
+                }
+              </span>
+            </div>
+          )}
         </div>
 
         <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(140px, 1fr))', gap:'1rem'}}>
