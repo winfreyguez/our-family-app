@@ -5,7 +5,7 @@ import ParticleGift from './ParticleGift'
 const START_DATE = new Date('2024-01-01')
 const CORRECT_PIN = '1212'
 
-// --- THE LIVELY GIFT CATALOG WITH PRICES ---
+// --- THE EXPANDED LIVELY GIFT CATALOG WITH PRICES ---
 const LIVELY_GIFTS = [
   { label: 'Good Morning ☀️', price: 50, category: 'Daily Love' },
   { label: 'Goodnight 🌙', price: 50, category: 'Daily Love' },
@@ -14,14 +14,24 @@ const LIVELY_GIFTS = [
   { label: 'Sleepy Time 💤', price: 50, category: 'Daily Love' },
   { label: 'Hugs 🫂', price: 150, category: 'Physical Touch' },
   { label: 'Kisses 💋', price: 200, category: 'Physical Touch' },
+  { label: 'Holding Hands 🤝', price: 80, category: 'Physical Touch' },
   { label: 'Crying On My Shoulder 😢', price: 100, category: 'Emotions' },
+  { label: 'Serenade 🎵', price: 250, category: 'Romantic' },
+  { label: 'Love Letter 💌', price: 150, category: 'Romantic' },
+  { label: 'Star Gazing 🌟', price: 200, category: 'Adventure' },
+  { label: 'Sunset Walk 🌅', price: 150, category: 'Adventure' },
   { label: 'Breakfast in Bed 🥞', price: 150, category: 'Food & Drink' },
+  { label: 'Picnic 🧺', price: 180, category: 'Food & Drink' },
+  { label: 'Coffee Date ☕', price: 100, category: 'Food & Drink' },
   { label: 'Romantic Dinner 🍷', price: 250, category: 'Food & Drink' },
+  { label: 'Dancing 💃', price: 150, category: 'Entertainment' },
   { label: 'Movie Night 🎬', price: 150, category: 'Entertainment' },
-  { label: 'Spa Date 🧖', price: 300, category: 'Luxury' },
+  { label: 'Spa Day 🧖‍♀️', price: 300, category: 'Luxury' },
+  { label: 'Date Night 💑', price: 200, category: 'Luxury' },
   { label: 'Road Trip 🚗', price: 300, category: 'Adventure' },
   { label: 'Just Because 🌟', price: 100, category: 'Surprise' },
   { label: 'Celebration 🎉', price: 300, category: 'Luxury' },
+  { label: 'Deep Conversation 🗣️', price: 80, category: 'Emotions' },
   { label: 'Random Hug 🤗', price: 80, category: 'Physical Touch' },
 ]
 
@@ -61,9 +71,10 @@ function App() {
   const [answers, setAnswers] = useState({})
   const [messages, setMessages] = useState([])
   
-  // --- LOVELY NEW STATES ---
-  const [walletBalance, setWalletBalance] = useState(1000) // Starts with 1000 love points
+  // --- STATES ---
+  const [walletBalance, setWalletBalance] = useState(1000) 
   const [planCategory, setPlanCategory] = useState('General')
+  const [planPrice, setPlanPrice] = useState('')
 
   const [planTitle, setPlanTitle] = useState('')
   const [planDate, setPlanDate] = useState('')
@@ -77,13 +88,12 @@ function App() {
   const [replyingTo, setReplyingTo] = useState(null)
   const [replyText, setReplyText] = useState('')
   
-  const [myName, setMyName] = useState('You') 
+  const [myName, setMyName] = useState('Winfrey') 
   const [chatInput, setChatInput] = useState('')
 
   const [activeParticleGift, setActiveParticleGift] = useState(null)
   const [openingGift, setOpeningGift] = useState(null)
 
-  // Load wallet from LocalStorage on device boot
   useEffect(() => {
     const saved = localStorage.getItem('love_wallet')
     if (saved) setWalletBalance(parseInt(saved))
@@ -144,7 +154,7 @@ function App() {
       await fetchPhotos()
       showToast('📸 Media uploaded!')
     } else {
-      showToast('Upload failed! Did you run the SQL policy?', 'error')
+      showToast('Upload failed!', 'error')
     }
     setIsUploading(false)
   }
@@ -154,8 +164,13 @@ function App() {
 
   const addPlan = async () => {
     if (!planTitle || !planDate) return showToast('Fill in title & date!', 'error')
-    await supabase.from('plans').insert({ title: planTitle, due_date: planDate, category: planCategory })
-    setPlanTitle(''); setPlanDate(''); fetchPlans(); showToast(`📅 Plan added!`)
+    await supabase.from('plans').insert({ 
+      title: planTitle, 
+      due_date: planDate, 
+      category: planCategory,
+      target_price: parseInt(planPrice) || 0 
+    })
+    setPlanTitle(''); setPlanDate(''); setPlanPrice(''); fetchPlans(); showToast(`📅 Plan added!`)
   }
   const togglePlan = async (id, currentStatus) => {
     await supabase.from('plans').update({ status: currentStatus === 'done' ? 'pending' : 'done' }).eq('id', id)
@@ -165,21 +180,18 @@ function App() {
     await supabase.from('plans').delete().eq('id', id); fetchPlans(); showToast('Plan deleted')
   }
 
-  // --- THE WALLET & GIFT SENDING LOGIC (VIRTUAL PAYMENT) ---
   const sendGift = async (livelyGift = null) => {
     let finalMessage = giftMsg;
     let finalPrice = 0;
     let finalCategory = 'Custom';
 
-    // If sending a lively gift from the catalog
     if (livelyGift) {
       finalMessage = livelyGift.label;
       finalPrice = livelyGift.price;
       finalCategory = livelyGift.category;
     } else {
-      // Handle custom box
       if (!giftMsg) return showToast('Write a message!', 'error')
-      finalPrice = 50; // Base price for custom
+      finalPrice = 50;
       finalCategory = giftType === 'Custom Message' ? 'Custom' : 'Luxury';
       if (giftType !== 'Custom Message') {
         const giftEmojis = {
@@ -187,22 +199,19 @@ function App() {
           'Spa Package': '🧖', 'Digital Gift Card': '💳'
         };
         finalMessage = `${giftEmojis[giftType] || '🎁'} ${giftType}: ${giftMsg}`;
-        finalPrice = 200; // Luxury items are more expensive
+        finalPrice = 200;
       }
     }
 
-    // CHECK THE WALLET
     if (walletBalance < finalPrice) {
       showToast(`Not enough Love Points! Need ${finalPrice - walletBalance} more 💖`, 'error');
       return;
     }
 
-    // DEDUCT FROM WALLET & SAVE TO LOCAL STORAGE
     const newBalance = walletBalance - finalPrice;
     setWalletBalance(newBalance);
     localStorage.setItem('love_wallet', newBalance.toString());
 
-    // SAVE TO DATABASE
     const { error } = await supabase.from('gifts').insert({ 
       message: finalMessage,
       price: finalPrice,
@@ -212,7 +221,6 @@ function App() {
 
     if (!error) {
       setGiftMsg(''); await fetchGifts(); 
-      // Special magic animation if it's a high value gift
       if (finalPrice >= 200) {
         setActiveParticleGift({ message: `🎁 You sent a ${finalPrice} Shilling gift!`, color: '#f43f5e' });
       }
@@ -334,16 +342,24 @@ function App() {
 
   const daysTogether = Math.floor((new Date() - START_DATE) / (1000 * 60 * 60 * 24))
 
+  // --- LOGIN PAGE ---
   if (!isLoggedIn) {
     return (
-      <div style={{display:'flex', justifyContent:'center', alignItems:'center', height:'100vh', background:'#fff0f5', fontFamily:'"Inter", sans-serif'}}>
-        <div style={{background:'white', padding:'3rem 2.5rem', borderRadius:'2rem', boxShadow:'0 20px 40px rgba(244, 63, 94, 0.15)', textAlign:'center', maxWidth:'350px', width:'100%'}}>
-          <h1 style={{color:'#f43f5e', fontSize:'2rem', fontWeight:'700', marginBottom:'0.5rem'}}>Welcome Home</h1>
-          <p style={{color:'#f43f5e', fontSize:'1.5rem', marginBottom:'1.5rem'}}>💕</p>
+      <div style={{display:'flex', justifyContent:'center', alignItems:'center', height:'100vh', background:'linear-gradient(135deg, #ffedf0, #fce4ec, #f3e8ff)', fontFamily:'"Inter", sans-serif', animation:'pulseBg 8s infinite alternate'}}>
+        <div style={{background:'rgba(255, 255, 255, 0.85)', backdropFilter:'blur(16px)', padding:'3rem 2.5rem', borderRadius:'2rem', boxShadow:'0 20px 40px rgba(244, 63, 94, 0.25), inset 0 0 0 1px rgba(255,255,255,0.5)', textAlign:'center', maxWidth:'400px', width:'100%'}}>
+          <div style={{fontSize:'4rem', marginBottom:'0.5rem', textShadow:'0 4px 12px rgba(244,63,94,0.3)'}}>💕</div>
+          <h1 style={{background:'linear-gradient(135deg, #f43f5e, #fb7185)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', fontWeight:'700', marginBottom:'0.5rem'}}>Winfrey & George</h1>
+          <div style={{fontSize:'0.9rem', background:'#fce4ec', padding:'0.5rem 1rem', borderRadius:'2rem', color:'#f43f5e', display:'inline-block', marginBottom:'1.5rem'}}>💖 944 Days of Love</div>
           <p style={{color:'#6b7280', fontSize:'0.9rem', marginBottom:'1.5rem'}}>Enter your secret PIN</p>
-          <input type="password" placeholder="1212" maxLength="4" value={pin} onChange={(e) => setPin(e.target.value)} style={{width:'100%', padding:'1rem', fontSize:'1.5rem', textAlign:'center', border:'2px solid #fce4ec', borderRadius:'1rem', outline:'none', marginBottom:'1.5rem', letterSpacing:'8px', background:'#fff0f5'}} />
-          <button onClick={handleLogin} style={{width:'100%', background:'#f43f5e', color:'white', padding:'1rem', border:'none', borderRadius:'1rem', fontSize:'1rem', fontWeight:'600', cursor:'pointer', transition:'0.2s', boxShadow:'0 4px 12px rgba(244, 63, 94, 0.3)'}} onMouseOver={(e) => e.target.style.transform='scale(1.02)'} onMouseOut={(e) => e.target.style.transform='scale(1)'}>Unlock 💕</button>
+          <input type="password" placeholder="1212" maxLength="4" value={pin} onChange={(e) => setPin(e.target.value)} style={{width:'100%', padding:'1rem', fontSize:'1.5rem', textAlign:'center', border:'2px solid #fce4ec', borderRadius:'1rem', outline:'none', marginBottom:'1.5rem', letterSpacing:'8px', background:'rgba(255,255,255,0.5)', transition:'0.3s'}} onFocus={(e) => e.target.style.borderColor='#f43f5e'} onBlur={(e) => e.target.style.borderColor='#fce4ec'} />
+          <button onClick={handleLogin} style={{width:'100%', background:'linear-gradient(135deg, #f43f5e, #fb7185)', color:'white', padding:'1rem', border:'none', borderRadius:'1rem', fontSize:'1rem', fontWeight:'600', cursor:'pointer', transition:'0.2s', boxShadow:'0 4px 12px rgba(244, 63, 94, 0.3)'}} onMouseOver={(e) => e.target.style.transform='scale(1.02)'} onMouseOut={(e) => e.target.style.transform='scale(1)'}>Enter Our World 💕</button>
         </div>
+        <style>{`
+          @keyframes pulseBg {
+            0% { background-position: 0% 50%; }
+            100% { background-position: 100% 50%; }
+          }
+        `}</style>
       </div>
     )
   }
@@ -356,9 +372,10 @@ function App() {
   if (currentView === 'gallery') {
     return (
       <ViewWrapper title="📸 Shared Gallery" goHome={() => setCurrentView('home')}>
-        <div style={{marginBottom:'1.5rem'}}>
+        <div style={{marginBottom:'1.5rem', display:'flex', gap:'1rem', justifyContent:'center', flexWrap:'wrap'}}>
           <input type="file" accept="image/*,video/*" capture="environment" onChange={uploadPhoto} disabled={isUploading} style={{display:'none'}} id="upload" />
-          <label htmlFor="upload" style={{display:'inline-block', background:'#f43f5e', color:'white', padding:'0.75rem 2rem', borderRadius:'2rem', cursor:'pointer', fontWeight:'600', fontSize:'0.95rem', transition:'0.2s', boxShadow:'0 4px 8px rgba(244, 63, 94, 0.2)'}}>{isUploading ? 'Uploading...' : '📸 Photo / Video'}</label>
+          <label htmlFor="upload" style={{display:'inline-block', background:'linear-gradient(135deg, #f43f5e, #fb7185)', color:'white', padding:'0.75rem 2rem', borderRadius:'2rem', cursor:'pointer', fontWeight:'600', fontSize:'0.95rem', transition:'0.2s', boxShadow:'0 4px 8px rgba(244, 63, 94, 0.2)'}}>{isUploading ? 'Uploading...' : '📸 Choose Media'}</label>
+          {isUploading && <button onClick={() => { setIsUploading(false); document.getElementById('upload').value = null; }} style={{background:'#ef4444', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'2rem', fontWeight:'600', cursor:'pointer'}}>Cancel Upload ✕</button>}
         </div>
         {photos.length === 0 ? (
           <div style={{padding:'3rem 1rem', background:'white', borderRadius:'1rem', color:'#9ca3af', border:'2px dashed #e5e7eb'}}>
@@ -388,61 +405,83 @@ function App() {
 
   if (currentView === 'timeline') {
     return (
-      <ViewWrapper title="🗺️ History Tree" goHome={() => setCurrentView('home')}>
+      <ViewWrapper title="📖 History Tree" goHome={() => setCurrentView('home')}>
         <div style={{display:'flex', flexWrap:'wrap', gap:'0.75rem', justifyContent:'center', marginBottom:'2rem'}}>
           <input type="text" placeholder="Memory title..." value={tlTitle} onChange={(e) => setTlTitle(e.target.value)} style={{padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none', width:'180px'}} />
           <input type="text" placeholder="Description" value={tlDesc} onChange={(e) => setTlDesc(e.target.value)} style={{padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none', width:'180px'}} />
           <input type="date" value={tlDate} onChange={(e) => setTlDate(e.target.value)} style={{padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none'}} />
-          <button onClick={addTimeline} style={{background:'#f43f5e', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer'}}>Add to Tree</button>
+          <button onClick={() => { setTlTitle(''); setTlDesc(''); setTlDate(''); }} style={{background:'#6b7280', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer'}}>Cancel</button>
+          <button onClick={addTimeline} style={{background:'linear-gradient(135deg, #f43f5e, #fb7185)', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer'}}>Add to Tree</button>
         </div>
-        <div style={{maxWidth:'600px', margin:'0 auto', textAlign:'left'}}>
-          {timelines.map((t, idx) => (
-            <div key={t.id} style={{display:'flex', gap:'1rem', marginBottom:'1.5rem', position:'relative'}}>
-              <div style={{background:'#f43f5e', color:'white', borderRadius:'50%', width:'32px', height:'32px', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'bold', zIndex:2, boxShadow:'0 0 0 4px #fff0f5'}}>{idx + 1}</div>
-              <div style={{flex:1, background:'white', padding:'1rem', borderRadius:'1rem', boxShadow:'0 2px 8px rgba(0,0,0,0.05)', position:'relative'}}>
-                <div style={{fontWeight:'600', fontSize:'1rem'}}>{t.title}</div>
-                <div style={{fontSize:'0.9rem', color:'#4b5563'}}>{t.description}</div>
-                <div style={{fontSize:'0.8rem', color:'#9ca3af', marginTop:'0.5rem'}}>📅 {new Date(t.memory_date).toLocaleDateString()}</div>
-                <button onClick={() => deleteTimeline(t.id)} style={{position:'absolute', top:'8px', right:'8px', background:'none', border:'none', color:'#9ca3af', cursor:'pointer', fontSize:'0.9rem'}}>✕</button>
+        
+        {timelines.length === 0 ? (
+          <div style={{padding:'3rem 1rem', background:'rgba(255,255,255,0.5)', borderRadius:'1.5rem', textAlign:'center', border:'2px dashed #fce4ec'}}>
+            <div style={{fontSize:'4rem'}}>🌳</div>
+            <p style={{color:'#9ca3af', fontSize:'1.1rem'}}>Start building your family history tree!</p>
+            <p style={{color:'#9ca3af', fontSize:'0.9rem'}}>Every tree starts with a single seed. Plant your first memory today.</p>
+          </div>
+        ) : (
+          <div style={{maxWidth:'600px', margin:'0 auto', textAlign:'left', position:'relative'}}>
+            <div style={{position:'absolute', left:'15px', top:'0', bottom:'0', width:'4px', background:'linear-gradient(to bottom, #f43f5e, #fb7185, #a78bfa)', borderRadius:'4px'}}></div>
+            {timelines.map((t, idx) => (
+              <div key={t.id} style={{display:'flex', gap:'1.5rem', marginBottom:'2rem', position:'relative', background:'white', padding:'1rem 1.5rem', borderRadius:'1rem', boxShadow:'0 4px 12px rgba(0,0,0,0.05)', border:'1px solid #fce4ec'}}>
+                <div style={{background:'linear-gradient(135deg, #f43f5e, #fb7185)', color:'white', borderRadius:'50%', width:'36px', height:'36px', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'bold', zIndex:2, boxShadow:'0 0 0 4px #fff0f5', flexShrink:0}}>{idx + 1}</div>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:'700', fontSize:'1.1rem', color:'#1f2937'}}>{t.title}</div>
+                  <div style={{fontSize:'0.9rem', color:'#4b5563', marginTop:'0.25rem'}}>{t.description}</div>
+                  <div style={{fontSize:'0.8rem', color:'#a78bfa', marginTop:'0.5rem', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                    <span>📅 {new Date(t.memory_date).toLocaleDateString()}</span>
+                    <button onClick={() => deleteTimeline(t.id)} style={{background:'none', border:'none', color:'#9ca3af', cursor:'pointer', fontSize:'0.9rem', fontWeight:'bold'}} onMouseOver={(e) => e.target.style.color='#ef4444'} onMouseOut={(e) => e.target.style.color='#9ca3af'}>🗑️ Remove</button>
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
-          {timelines.length === 0 && <p style={{textAlign:'center', color:'#9ca3af', padding:'2rem'}}>Start building your family history tree! 🌳</p>}
-        </div>
+            ))}
+          </div>
+        )}
       </ViewWrapper>
     )
   }
 
   if (currentView === 'chat') {
     return (
-      <div style={{fontFamily:'"Inter", sans-serif', height:'100vh', background:'#f0f2f5', display:'flex', flexDirection:'column', overflow:'hidden'}}>
-        <div style={{background:'#f43f5e', color:'white', padding:'1rem 1.5rem', display:'flex', justifyContent:'space-between', alignItems:'center', boxShadow:'0 2px 4px rgba(0,0,0,0.1)'}}>
+      <div style={{fontFamily:'"Inter", sans-serif', height:'100vh', display:'flex', flexDirection:'column', overflow:'hidden'}}>
+        {/* Chat Header */}
+        <div style={{background:'linear-gradient(135deg, #f43f5e, #a78bfa)', color:'white', padding:'1rem 1.5rem', display:'flex', justifyContent:'space-between', alignItems:'center', boxShadow:'0 2px 4px rgba(0,0,0,0.1)'}}>
           <button onClick={() => setCurrentView('home')} style={{background:'none', border:'none', color:'white', fontSize:'1.2rem', cursor:'pointer'}}>←</button>
-          <div style={{fontWeight:'700', fontSize:'1.1rem'}}>💬 Family Chat</div>
+          <div style={{fontWeight:'700', fontSize:'1.1rem', textAlign:'center'}}>💞 Winfrey & George</div>
           <div style={{width:'24px'}}></div>
         </div>
-        <div style={{padding:'0.75rem 1rem', background:'white', borderBottom:'1px solid #e5e7eb', textAlign:'center', fontSize:'0.9rem'}}>
+        
+        {/* Name Input */}
+        <div style={{padding:'0.75rem 1rem', background:'rgba(255, 255, 255, 0.8)', backdropFilter:'blur(4px)', borderBottom:'1px solid #f3f4f6', textAlign:'center', fontSize:'0.9rem'}}>
           <span style={{color:'#4b5563'}}>Your name: </span>
-          <input type="text" value={myName} onChange={(e) => setMyName(e.target.value)} style={{padding:'0.25rem 0.5rem', border:'1px solid #d1d5db', borderRadius:'0.5rem', outline:'none'}} />
+          <input type="text" value={myName} onChange={(e) => setMyName(e.target.value)} style={{padding:'0.25rem 0.5rem', border:'1px solid #fce4ec', borderRadius:'0.5rem', outline:'none', background:'white'}} />
         </div>
-        <div style={{flex:1, overflowY:'auto', padding:'1rem 1.5rem', display:'flex', flexDirection:'column', gap:'0.75rem'}}>
+
+        {/* Messages Container */}
+        <div style={{flex:1, overflowY:'auto', padding:'1rem 1.5rem', display:'flex', flexDirection:'column', gap:'0.75rem', background:'linear-gradient(180deg, #fff0f5, #f3e8ff)'}}>
           {messages.map((msg) => {
             const isMe = msg.sender_name === myName;
             return (
-              <div key={msg.id} style={{display:'flex', flexDirection:'column', alignItems: isMe ? 'flex-end' : 'flex-start'}}>
-                <div style={{maxWidth:'75%', background: isMe ? '#f43f5e' : '#ffffff', color: isMe ? 'white' : '#1f2937', padding:'0.75rem 1rem', borderRadius: isMe ? '1rem 1rem 0 1rem' : '1rem 1rem 1rem 0', boxShadow:'0 1px 2px rgba(0,0,0,0.05)'}}>
-                  {isMe ? null : <div style={{fontSize:'0.75rem', fontWeight:'600', marginBottom:'0.2rem', color:'#f43f5e'}}>{msg.sender_name}</div>}
+              <div key={msg.id} style={{display:'flex', flexDirection:'column', alignItems: isMe ? 'flex-end' : 'flex-start', animation:'popIn 0.3s ease-out'}}>
+                <div style={{maxWidth:'75%', background: isMe ? 'linear-gradient(135deg, #f43f5e, #fb7185)' : 'linear-gradient(135deg, #8b5cf6, #a78bfa)', color:'white', padding:'0.75rem 1rem', borderRadius: isMe ? '1rem 1rem 0 1rem' : '1rem 1rem 1rem 0', boxShadow:'0 2px 8px rgba(244, 63, 94, 0.2)'}}>
+                  {!isMe && <div style={{fontSize:'0.75rem', fontWeight:'600', marginBottom:'0.2rem', opacity:'0.9'}}>{msg.sender_name}</div>}
                   <div>{msg.message}</div>
                 </div>
-                <div style={{fontSize:'0.7rem', color:'#9ca3af', marginTop:'0.25rem'}}>{timeAgo(msg.created_at)}</div>
+                <div style={{fontSize:'0.7rem', color:'#a78bfa', marginTop:'0.25rem', fontWeight:'500'}}>{timeAgo(msg.created_at)}</div>
               </div>
             )
           })}
         </div>
-        <div style={{background:'white', padding:'0.75rem 1rem', display:'flex', gap:'0.75rem', borderTop:'1px solid #e5e7eb'}}>
-          <input type="text" placeholder="Type a message..." value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendChatMessage()} style={{flex:1, padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'2rem', outline:'none'}} />
-          <button onClick={sendChatMessage} style={{background:'#f43f5e', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'2rem', fontWeight:'600', cursor:'pointer'}}>Send</button>
+
+        {/* Chat Input */}
+        <div style={{background:'white', padding:'0.75rem 1rem', display:'flex', gap:'0.75rem', borderTop:'2px solid #fce4ec'}}>
+          <input type="text" placeholder="Type a message..." value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendChatMessage()} style={{flex:1, padding:'0.75rem 1rem', border:'2px solid #fce4ec', borderRadius:'2rem', outline:'none', transition:'0.3s'}} onFocus={(e) => e.target.style.borderColor='#f43f5e'} onBlur={(e) => e.target.style.borderColor='#fce4ec'} />
+          <button onClick={sendChatMessage} style={{background:'linear-gradient(135deg, #f43f5e, #fb7185)', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'2rem', fontWeight:'600', cursor:'pointer', boxShadow:'0 4px 12px rgba(244, 63, 94, 0.3)'}}>Send</button>
         </div>
+        <style>{`
+          @keyframes popIn { from { opacity:0; transform: scale(0.9); } to { opacity:1; transform: scale(1); } }
+        `}</style>
       </div>
     )
   }
@@ -453,7 +492,7 @@ function App() {
         <div style={{display:'flex', flexWrap:'wrap', gap:'0.75rem', justifyContent:'center', marginBottom:'2rem'}}>
           <input type="text" placeholder="Write your own question..." value={newQuestionText} onChange={(e) => setNewQuestionText(e.target.value)} style={{flex:'1', padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none', minWidth:'200px'}} />
           <button onClick={askManualQuestion} style={{background:'#1f2937', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer'}}>Ask Manual</button>
-          <button onClick={askRandomQuestion} style={{background:'#f43f5e', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer'}}>Surprise Me ✨</button>
+          <button onClick={askRandomQuestion} style={{background:'linear-gradient(135deg, #f43f5e, #fb7185)', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer'}}>Surprise Me ✨</button>
         </div>
         <div style={{maxWidth:'600px', margin:'0 auto'}}>
           {questions.length === 0 ? <p style={{color:'#9ca3af'}}>No questions yet. Click "Surprise Me"!</p> : (
@@ -488,9 +527,10 @@ function App() {
             <option value="Home Project">Home Project 🛠️</option>
             <option value="Health & Wellness">Health & Wellness 🧘</option>
           </select>
-          <input type="text" placeholder="Plan title..." value={planTitle} onChange={(e) => setPlanTitle(e.target.value)} style={{padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none', width:'200px'}} />
+          <input type="text" placeholder="Plan title..." value={planTitle} onChange={(e) => setPlanTitle(e.target.value)} style={{padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none', width:'160px'}} />
+          <input type="text" placeholder="Target Price (Shillings)" value={planPrice} onChange={(e) => setPlanPrice(e.target.value)} style={{padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none', width:'140px'}} />
           <input type="date" value={planDate} onChange={(e) => setPlanDate(e.target.value)} style={{padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none'}} />
-          <button onClick={addPlan} style={{background:'#f43f5e', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer'}}>Add Plan</button>
+          <button onClick={addPlan} style={{background:'linear-gradient(135deg, #f43f5e, #fb7185)', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer'}}>Add Plan</button>
         </div>
         <div style={{maxWidth:'600px', margin:'0 auto'}}>
           {plans.map(p => {
@@ -498,9 +538,15 @@ function App() {
             const categoryColors = {
               'Date Night': '#fce7f3', 'Family Trip': '#e0f2fe', 'Home Project': '#fef3c7', 'Health & Wellness': '#d1fae5', 'General': '#f3f4f6'
             };
+            const displayPrice = p.target_price && p.target_price > 0 ? `${p.target_price} Shillings` : null;
             return (
               <div key={p.id} style={{display:'flex', alignItems:'center', justifyContent:'space-between', background: categoryColors[p.category] || '#f3f4f6', padding:'0.75rem 1.5rem', margin:'0.75rem 0', borderRadius:'1rem', boxShadow:'0 2px 8px rgba(0,0,0,0.05)', borderLeft: isOverdue ? '6px solid #ef4444' : p.status === 'done' ? '6px solid #22c55e' : '6px solid #f43f5e', opacity: p.status === 'done' ? '0.7' : '1'}}>
-                <span onClick={() => togglePlan(p.id, p.status)} style={{cursor:'pointer', flex:'1', textDecoration: p.status === 'done' ? 'line-through' : 'none', color: isOverdue && p.status !== 'done' ? '#ef4444' : '#1f2937'}}><b>{p.title}</b> <span style={{fontSize:'0.8rem', background:'rgba(0,0,0,0.05)', padding:'0.2rem 0.5rem', borderRadius:'0.5rem', marginLeft:'0.5rem'}}>{p.category}</span> <span style={{fontSize:'0.85rem', color:'#6b7280', marginLeft:'0.5rem'}}>({new Date(p.due_date).toLocaleDateString()})</span></span>
+                <span onClick={() => togglePlan(p.id, p.status)} style={{cursor:'pointer', flex:'1', textDecoration: p.status === 'done' ? 'line-through' : 'none', color: isOverdue && p.status !== 'done' ? '#ef4444' : '#1f2937'}}>
+                  <b>{p.title}</b> 
+                  <span style={{fontSize:'0.8rem', background:'rgba(0,0,0,0.05)', padding:'0.2rem 0.5rem', borderRadius:'0.5rem', marginLeft:'0.5rem'}}>{p.category}</span>
+                  {displayPrice && <span style={{fontSize:'0.8rem', background:'#fef3c7', padding:'0.2rem 0.5rem', borderRadius:'0.5rem', marginLeft:'0.5rem', fontWeight:'bold', color:'#d97706'}}>{displayPrice}</span>}
+                  <span style={{fontSize:'0.85rem', color:'#6b7280', marginLeft:'0.5rem'}}>({new Date(p.due_date).toLocaleDateString()})</span>
+                </span>
                 <div style={{display:'flex', gap:'0.75rem', alignItems:'center'}}>
                   <span style={{fontSize:'1.2rem'}}>{p.status === 'done' ? '✅' : (isOverdue ? '⚠️' : '⬜')}</span>
                   <button onClick={() => deletePlan(p.id)} style={{background:'none', border:'none', color:'#9ca3af', cursor:'pointer', fontSize:'1rem'}} onMouseOver={(e) => e.target.style.color='#ef4444'} onMouseOut={(e) => e.target.style.color='#9ca3af'}>🗑️</button>
@@ -516,19 +562,16 @@ function App() {
   if (currentView === 'gifts') {
     return (
       <ViewWrapper title="🎁 Gifts" goHome={() => setCurrentView('home')}>
-        {/* WALLET AND TOP UP */}
-        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', background:'white', padding:'0.75rem 1.5rem', borderRadius:'1rem', marginBottom:'1.5rem', boxShadow:'0 2px 8px rgba(0,0,0,0.05)'}}>
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', background:'white', padding:'0.75rem 1.5rem', borderRadius:'1rem', marginBottom:'1.5rem', boxShadow:'0 2px 8px rgba(0,0,0,0.05)', flexWrap:'wrap', gap:'0.5rem'}}>
           <div><span style={{fontWeight:'bold', color:'#f43f5e'}}>💖 Love Points:</span> <span style={{fontWeight:'700', fontSize:'1.2rem', color:'#1f2937'}}>{walletBalance}</span></div>
-          <button onClick={() => { const newBal = walletBalance + 500; setWalletBalance(newBal); localStorage.setItem('love_wallet', newBal.toString()); showToast('500 Love Points Added! 💖'); }} style={{background:'#1f2937', color:'white', padding:'0.5rem 1rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer'}}>Boost Love 💖</button>
+          <button onClick={() => { const newBal = walletBalance + 500; setWalletBalance(newBal); localStorage.setItem('love_wallet', newBal.toString()); showToast('500 Love Points Added! 💖'); }} style={{background:'linear-gradient(135deg, #1f2937, #4b5563)', color:'white', padding:'0.5rem 1rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer'}}>Boost Love 💖</button>
         </div>
 
-        {/* SEND CUSTOM GIFT */}
         <div style={{display:'flex', flexWrap:'wrap', gap:'0.75rem', justifyContent:'center', marginBottom:'1.5rem'}}>
           <input type="text" placeholder="Custom message..." value={giftMsg} onChange={(e) => setGiftMsg(e.target.value)} style={{flex:'1', padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none', minWidth:'150px'}} />
-          <button onClick={() => sendGift()} style={{background:'#f43f5e', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer'}}>Send Custom (50💰)</button>
+          <button onClick={() => sendGift()} style={{background:'linear-gradient(135deg, #f43f5e, #fb7185)', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer'}}>Send Custom (50💰)</button>
         </div>
 
-        {/* LIVELY GIFT CATALOG */}
         <div style={{marginBottom:'2rem'}}>
           <h3 style={{textAlign:'center', color:'#6b7280', marginBottom:'1rem'}}>✨ Choose a Lively Gift</h3>
           <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(180px, 1fr))', gap:'0.75rem'}}>
@@ -542,7 +585,6 @@ function App() {
           </div>
         </div>
 
-        {/* GIFT LIST */}
         <div style={{maxWidth:'600px', margin:'0 auto'}}>
           {gifts.length === 0 ? <div style={{padding:'2rem', color:'#9ca3af', fontStyle:'italic'}}>Send your first gift!</div> : (
             gifts.map(g => (
@@ -550,7 +592,6 @@ function App() {
                 <div style={{background: g.is_opened ? '#d1fae5' : randomColor(), padding:'1rem 1.5rem', borderRadius:'1.5rem', borderBottomLeftRadius:'0.5rem', position:'relative', boxShadow:'0 2px 8px rgba(0,0,0,0.05)', textAlign:'left', border: g.is_opened ? '2px solid #10b981' : 'none'}}>
                   
                   {!g.is_opened ? (
-                    // The Gift Box
                     <div style={{display:'flex', alignItems:'center', gap:'0.75rem'}}>
                       <div style={{fontSize:'1.5rem'}}>🎁</div>
                       <div>
@@ -562,7 +603,6 @@ function App() {
                       </div>
                     </div>
                   ) : (
-                    // The Opened View
                     <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
                       <div>
                         <div style={{fontWeight:'600', fontSize:'1rem', color:'#065f46'}}>🎉 Opened!</div>
@@ -587,37 +627,48 @@ function App() {
     )
   }
 
-  // --- HOME ---
+  // --- FAMILY HUB (HOME) ---
   return (
-    <div style={{fontFamily:'"Inter", sans-serif', minHeight:'100vh', background:'#fff0f5', padding:'2rem 1rem'}}>
+    <div style={{fontFamily:'"Inter", sans-serif', minHeight:'100vh', background:'linear-gradient(135deg, #fff0f5 0%, #f3e8ff 50%, #ffebf0 100%)', padding:'2rem 1rem'}}>
       <div style={{maxWidth:'800px', margin:'0 auto'}}>
-        <div style={{background:'rgba(255, 255, 255, 0.7)', backdropFilter:'blur(10px)', borderRadius:'2rem', padding:'3rem 2rem', boxShadow:'0 20px 40px rgba(244, 63, 94, 0.1)', textAlign:'center', marginBottom:'2rem'}}>
-          <div style={{fontSize:'4rem', marginBottom:'0.5rem'}}>💕</div>
-          <h1 style={{color:'#f43f5e', fontSize:'2.2rem', fontWeight:'700', marginBottom:'0.5rem'}}>Family Hub</h1>
-          <div style={{fontSize:'0.95rem', color:'#6b7280'}}><span style={{fontWeight:'600', color:'#f43f5e'}}>{daysTogether}</span> beautiful days together 💫</div>
+        <div style={{background:'rgba(255, 255, 255, 0.7)', backdropFilter:'blur(16px)', borderRadius:'2rem', padding:'3rem 2rem', boxShadow:'0 20px 40px rgba(244, 63, 94, 0.15), inset 0 0 0 1px rgba(255,255,255,0.6)', textAlign:'center', marginBottom:'2rem', border:'1px solid rgba(255,255,255,0.5)'}}>
+          <div style={{fontSize:'4rem', marginBottom:'0.5rem', animation:'heartBeat 1.5s infinite'}}>💕</div>
+          <h1 style={{background:'linear-gradient(135deg, #f43f5e, #8b5cf6)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', fontSize:'2.5rem', fontWeight:'700', marginBottom:'0.5rem'}}>Winfrey & George</h1>
+          <div style={{fontSize:'1.1rem', color:'#6b7280', background:'#fce4ec', padding:'0.5rem 1.5rem', borderRadius:'2rem', display:'inline-block'}}><span style={{fontWeight:'600', color:'#f43f5e'}}>{daysTogether}</span> beautiful days together 💫</div>
         </div>
+
         <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(140px, 1fr))', gap:'1rem'}}>
           <MenuCard icon="📸" title="Gallery" action={() => setCurrentView('gallery')} />
-          <MenuCard icon="🗺️" title="History Tree" action={() => setCurrentView('timeline')} />
+          <MenuCard icon="📖" title="History Tree" action={() => setCurrentView('timeline')} />
           <MenuCard icon="📥" title="Inbox" action={() => setCurrentView('questions')} />
           <MenuCard icon="💬" title="Chat" action={() => setCurrentView('chat')} />
           <MenuCard icon="📅" title="Plans" action={() => setCurrentView('plans')} />
           <MenuCard icon="🎁" title="Gifts" action={() => setCurrentView('gifts')} />
         </div>
-        <button onClick={() => setIsLoggedIn(false)} style={{display:'block', margin:'3rem auto 0', background:'#ef4444', color:'white', padding:'0.75rem 2.5rem', border:'none', borderRadius:'2rem', fontSize:'0.95rem', cursor:'pointer', fontWeight:'500'}}>Log Out</button>
+        
+        <button onClick={() => setIsLoggedIn(false)} style={{display:'block', margin:'3rem auto 0', background:'linear-gradient(135deg, #1f2937, #4b5563)', color:'white', padding:'0.75rem 2.5rem', border:'none', borderRadius:'2rem', fontSize:'0.95rem', cursor:'pointer', fontWeight:'500', boxShadow:'0 4px 12px rgba(0,0,0,0.1)'}}>Log Out</button>
       </div>
       {toast && (
         <div style={{position:'fixed', bottom:'2rem', left:'50%', transform:'translateX(-50%)', background: toast.type === 'error' ? '#ef4444' : '#22c55e', color:'white', padding:'1rem 2rem', borderRadius:'2rem', boxShadow:'0 10px 25px rgba(0,0,0,0.15)', fontWeight:'500', zIndex:1000, animation:'fadeIn 0.3s'}}>{toast.message}</div>
       )}
+      <style>{`
+        @keyframes heartBeat {
+          0% { transform: scale(1); }
+          14% { transform: scale(1.3); }
+          28% { transform: scale(1); }
+          42% { transform: scale(1.3); }
+          70% { transform: scale(1); }
+        }
+      `}</style>
     </div>
   )
 }
 
 const ViewWrapper = ({ title, children, goHome }) => (
-  <div style={{fontFamily:'"Inter", sans-serif', minHeight:'100vh', background:'#fff0f5', padding:'2rem 1rem', textAlign:'center'}}>
+  <div style={{fontFamily:'"Inter", sans-serif', minHeight:'100vh', background:'linear-gradient(135deg, #fff0f5 0%, #f3e8ff 50%, #ffebf0 100%)', padding:'2rem 1rem', textAlign:'center'}}>
     <div style={{maxWidth:'800px', margin:'0 auto'}}>
-      <button onClick={goHome} style={{background:'none', border:'none', fontSize:'1.2rem', cursor:'pointer', color:'#f43f5e', marginBottom:'1.5rem', fontWeight:'600', display:'flex', alignItems:'center', gap:'0.5rem'}}>← Back</button>
-      <h2 style={{color:'#1f2937', fontSize:'1.8rem', fontWeight:'700', marginBottom:'2rem'}}>{title}</h2>
+      <button onClick={goHome} style={{background:'none', border:'none', fontSize:'1.2rem', cursor:'pointer', color:'#f43f5e', marginBottom:'1.5rem', fontWeight:'600', display:'flex', alignItems:'center', gap:'0.5rem', transition:'0.2s'}} onMouseOver={(e) => e.target.style.transform='translateX(-4px)'} onMouseOut={(e) => e.target.style.transform='translateX(0)'}>← Back</button>
+      <h2 style={{background:'linear-gradient(135deg, #1f2937, #4b5563)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', fontSize:'2rem', fontWeight:'700', marginBottom:'2rem', display:'inline-block'}}>{title}</h2>
       {children}
     </div>
   </div>
