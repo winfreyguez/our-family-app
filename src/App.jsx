@@ -4,14 +4,38 @@ import { supabase } from './supabaseClient'
 // --- APP CONFIG ---
 const START_DATE = new Date('2024-01-01') // Change this to your actual anniversary!
 const CORRECT_PIN = '1212'
-const GIFT_EMOJIS = ['❤️', '🌹', '🌟', '💌', '🎉']
+const GIFT_EMOJIS = ['❤️', '🌹', '🌟', '💌', '🎉', '💝', '🌺', '✨']
+
+// --- HELPERS ---
+const timeAgo = (dateString) => {
+  const date = new Date(dateString)
+  const now = new Date()
+  const seconds = Math.floor((now - date) / 1000)
+  let interval = seconds / 31536000
+  if (interval > 1) return Math.floor(interval) + ' years ago'
+  interval = seconds / 2592000
+  if (interval > 1) return Math.floor(interval) + ' months ago'
+  interval = seconds / 86400
+  if (interval > 1) return Math.floor(interval) + ' days ago'
+  interval = seconds / 3600
+  if (interval > 1) return Math.floor(interval) + ' hours ago'
+  interval = seconds / 60
+  if (interval > 1) return Math.floor(interval) + ' mins ago'
+  return Math.floor(seconds) === 0 ? 'Just now' : Math.floor(seconds) + ' seconds ago'
+}
+
+const randomColor = () => {
+  const colors = ['#ffe4e6', '#fce7f3', '#f3e8ff', '#ede9fe', '#e0f2fe', '#ccfbf1', '#fef3c7']
+  return colors[Math.floor(Math.random() * colors.length)]
+}
 
 function App() {
   // --- STATE ---
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [pin, setPin] = useState('')
   const [currentView, setCurrentView] = useState('home')
-  const [toast, setToast] = useState(null) // { message, type }
+  const [toast, setToast] = useState(null)
+  const [loading, setLoading] = useState(false) // Specific loading state
   
   // --- DATA STATE ---
   const [photos, setPhotos] = useState([])
@@ -24,11 +48,10 @@ function App() {
   const [planTitle, setPlanTitle] = useState('')
   const [planDate, setPlanDate] = useState('')
   const [giftMsg, setGiftMsg] = useState('')
-  const [giftEmoji, setGiftEmoji] = useState('❤️')
   const [answerText, setAnswerText] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
 
-  // --- TOAST NOTIFICATIONS ---
+  // --- TOAST ---
   const showToast = (msg, type = 'success') => {
     setToast({ message: msg, type })
     setTimeout(() => setToast(null), 3000)
@@ -55,92 +78,86 @@ function App() {
     if (data) setGifts(data)
   }
   const fetchRandomQuestion = async () => {
-    setCurrentQuestion(null); setAnswers([])
+    setLoading(true); setCurrentQuestion(null); setAnswers([])
     const { data } = await supabase.from('questions').select('*').order('random()').limit(1).single()
     if (data) {
       setCurrentQuestion(data)
       const { data: ansData } = await supabase.from('answers').select('*').eq('question_id', data.id)
       if (ansData) setAnswers(ansData)
     } else {
-      showToast('No questions in database!', 'error')
+      showToast('No questions found! Run the SQL seed.', 'error')
     }
+    setLoading(false)
   }
 
   // --- ACTIONS ---
   const uploadPhoto = async (e) => {
     const file = e.target.files[0]; if (!file) return
-    setIsLoading(true)
+    setIsUploading(true)
     const path = `family_${Date.now()}.jpg`
     const { error } = await supabase.storage.from('gallery').upload(path, file)
     if (!error) {
       const { data: urlData } = supabase.storage.from('gallery').getPublicUrl(path)
       await supabase.from('photos').insert({ storage_path: urlData.publicUrl, caption: 'Our memory ✨' })
       fetchPhotos(); showToast('Photo uploaded! 💕')
-    } else showToast('Upload failed', 'error')
-    setIsLoading(false)
+    } else showToast('Upload failed! Make sure bucket is public.', 'error')
+    setIsUploading(false)
   }
   const deletePhoto = async (id) => {
-    await supabase.from('photos').delete().eq('id', id)
-    fetchPhotos(); showToast('Photo deleted')
+    await supabase.from('photos').delete().eq('id', id); fetchPhotos(); showToast('Photo deleted')
   }
 
   const addPlan = async () => {
     if (!planTitle || !planDate) return showToast('Fill in title & date!', 'error')
     await supabase.from('plans').insert({ title: planTitle, due_date: planDate })
-    setPlanTitle(''); setPlanDate('')
-    fetchPlans(); showToast(`Plan "${planTitle}" added! 📅`)
+    setPlanTitle(''); setPlanDate(''); fetchPlans(); showToast(`Plan "${planTitle}" added! 📅`)
   }
   const togglePlan = async (id, currentStatus) => {
-    const newStatus = currentStatus === 'done' ? 'pending' : 'done'
-    await supabase.from('plans').update({ status: newStatus }).eq('id', id)
+    await supabase.from('plans').update({ status: currentStatus === 'done' ? 'pending' : 'done' }).eq('id', id)
     fetchPlans()
   }
   const deletePlan = async (id) => {
-    await supabase.from('plans').delete().eq('id', id)
-    fetchPlans(); showToast('Plan deleted')
+    await supabase.from('plans').delete().eq('id', id); fetchPlans(); showToast('Plan deleted')
   }
 
   const sendGift = async () => {
     if (!giftMsg) return showToast('Write a message!', 'error')
-    await supabase.from('gifts').insert({ message: `${giftEmoji} ${giftMsg}` })
+    const emoji = GIFT_EMOJIS[Math.floor(Math.random() * GIFT_EMOJIS.length)]
+    await supabase.from('gifts').insert({ message: `${emoji} ${giftMsg}` })
     setGiftMsg('')
-    fetchGifts(); showToast(`Gift sent! ${giftEmoji}`)
+    fetchGifts(); showToast(`Gift sent with love! ${emoji}`)
   }
   const deleteGift = async (id) => {
-    await supabase.from('gifts').delete().eq('id', id)
-    fetchGifts(); showToast('Gift removed')
+    await supabase.from('gifts').delete().eq('id', id); fetchGifts(); showToast('Gift removed')
   }
 
   const submitAnswer = async () => {
     if (!answerText || !currentQuestion) return
     await supabase.from('answers').insert({ question_id: currentQuestion.id, answer: answerText })
-    setAnswerText('')
-    fetchRandomQuestion(); showToast('Answer saved! ❤️')
+    setAnswerText(''); fetchRandomQuestion(); showToast('Answer saved! ❤️')
   }
 
-  // --- USE EFFECTS ---
+  // --- EFFECTS ---
   useEffect(() => { if (currentView === 'gallery') fetchPhotos() }, [currentView])
   useEffect(() => { if (currentView === 'plans') fetchPlans() }, [currentView])
   useEffect(() => { if (currentView === 'gifts') fetchGifts() }, [currentView])
   useEffect(() => { if (currentView === 'questions') fetchRandomQuestion() }, [currentView])
 
-  // --- CALCULATE DAYS TOGETHER ---
+  // --- DAYS ---
   const daysTogether = Math.floor((new Date() - START_DATE) / (1000 * 60 * 60 * 24))
 
-  // --- LOGIN SCREEN ---
+  // --- LOGIN ---
   if (!isLoggedIn) {
     return (
-      <>
-        <div style={{display:'flex', justifyContent:'center', alignItems:'center', height:'100vh', background:'#fff0f5', fontFamily:'"Inter", sans-serif'}}>
-          <div style={{background:'white', padding:'3rem 2.5rem', borderRadius:'2rem', boxShadow:'0 20px 40px rgba(244, 63, 94, 0.15)', textAlign:'center', maxWidth:'350px', width:'100%'}}>
-            <h1 style={{color:'#f43f5e', fontSize:'2rem', fontWeight:'700', marginBottom:'0.5rem'}}>Welcome Home</h1>
-            <p style={{color:'#f43f5e', fontSize:'1.5rem', marginBottom:'1.5rem'}}>💕</p>
-            <p style={{color:'#6b7280', fontSize:'0.9rem', marginBottom:'1.5rem'}}>Enter your secret PIN</p>
-            <input type="password" placeholder="1212" maxLength="4" value={pin} onChange={(e) => setPin(e.target.value)} style={{width:'100%', padding:'1rem', fontSize:'1.5rem', textAlign:'center', border:'2px solid #fce4ec', borderRadius:'1rem', outline:'none', marginBottom:'1.5rem', letterSpacing:'8px', background:'#fff0f5'}} />
-            <button onClick={handleLogin} style={{width:'100%', background:'#f43f5e', color:'white', padding:'1rem', border:'none', borderRadius:'1rem', fontSize:'1rem', fontWeight:'600', cursor:'pointer', transition:'0.2s', boxShadow:'0 4px 12px rgba(244, 63, 94, 0.3)'}} onMouseOver={(e) => e.target.style.transform='scale(1.02)'} onMouseOut={(e) => e.target.style.transform='scale(1)'}>Unlock 💕</button>
-          </div>
+      <div style={{display:'flex', justifyContent:'center', alignItems:'center', height:'100vh', background:'#fff0f5', fontFamily:'"Inter", sans-serif'}}>
+        <div style={{background:'white', padding:'3rem 2.5rem', borderRadius:'2rem', boxShadow:'0 20px 40px rgba(244, 63, 94, 0.15)', textAlign:'center', maxWidth:'350px', width:'100%'}}>
+          <h1 style={{color:'#f43f5e', fontSize:'2rem', fontWeight:'700', marginBottom:'0.5rem'}}>Welcome Home</h1>
+          <p style={{color:'#f43f5e', fontSize:'1.5rem', marginBottom:'1.5rem'}}>💕</p>
+          <p style={{color:'#6b7280', fontSize:'0.9rem', marginBottom:'1.5rem'}}>Enter your secret PIN</p>
+          <input type="password" placeholder="1212" maxLength="4" value={pin} onChange={(e) => setPin(e.target.value)} style={{width:'100%', padding:'1rem', fontSize:'1.5rem', textAlign:'center', border:'2px solid #fce4ec', borderRadius:'1rem', outline:'none', marginBottom:'1.5rem', letterSpacing:'8px', background:'#fff0f5'}} />
+          <button onClick={handleLogin} style={{width:'100%', background:'#f43f5e', color:'white', padding:'1rem', border:'none', borderRadius:'1rem', fontSize:'1rem', fontWeight:'600', cursor:'pointer', transition:'0.2s', boxShadow:'0 4px 12px rgba(244, 63, 94, 0.3)'}} onMouseOver={(e) => e.target.style.transform='scale(1.02)'} onMouseOut={(e) => e.target.style.transform='scale(1)'}>Unlock 💕</button>
         </div>
-      </>
+      </div>
     )
   }
 
@@ -150,17 +167,24 @@ function App() {
     return (
       <ViewWrapper title="📸 Shared Gallery" goHome={() => setCurrentView('home')}>
         <div style={{marginBottom:'1.5rem'}}>
-          <input type="file" accept="image/*" onChange={uploadPhoto} disabled={isLoading} style={{display:'none'}} id="upload" />
-          <label htmlFor="upload" style={{display:'inline-block', background:'#f43f5e', color:'white', padding:'0.75rem 2rem', borderRadius:'2rem', cursor:'pointer', fontWeight:'600', fontSize:'0.95rem', transition:'0.2s', boxShadow:'0 4px 8px rgba(244, 63, 94, 0.2)'}}>{isLoading ? 'Uploading...' : 'Add Memory 🖼️'}</label>
+          <input type="file" accept="image/*" onChange={uploadPhoto} disabled={isUploading} style={{display:'none'}} id="upload" />
+          <label htmlFor="upload" style={{display:'inline-block', background:'#f43f5e', color:'white', padding:'0.75rem 2rem', borderRadius:'2rem', cursor:'pointer', fontWeight:'600', fontSize:'0.95rem', transition:'0.2s', boxShadow:'0 4px 8px rgba(244, 63, 94, 0.2)'}}>{isUploading ? 'Uploading...' : 'Add Memory 🖼️'}</label>
         </div>
-        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:'1.5rem'}}>
-          {photos.map(p => (
-            <div key={p.id} style={{position:'relative', borderRadius:'1rem', overflow:'hidden', boxShadow:'0 4px 12px rgba(0,0,0,0.08)', transition:'0.3s', aspectRatio:'1', background:'#f3f4f6'}}>
-              <img src={p.storage_path} alt="memory" style={{width:'100%', height:'100%', objectFit:'cover'}} />
-              <button onClick={() => deletePhoto(p.id)} style={{position:'absolute', top:'8px', right:'8px', background:'rgba(0,0,0,0.6)', color:'white', border:'none', borderRadius:'50%', width:'28px', height:'28px', cursor:'pointer', fontWeight:'bold', fontSize:'14px', display:'flex', justifyContent:'center', alignItems:'center'}}>✕</button>
-            </div>
-          ))}
-        </div>
+        {photos.length === 0 ? (
+          <div style={{padding:'3rem 1rem', background:'white', borderRadius:'1rem', color:'#9ca3af', border:'2px dashed #e5e7eb'}}>
+            <div style={{fontSize:'3rem'}}>🖼️</div>
+            <p>No memories yet. Upload your first photo together!</p>
+          </div>
+        ) : (
+          <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:'1.5rem'}}>
+            {photos.map(p => (
+              <div key={p.id} style={{position:'relative', borderRadius:'1rem', overflow:'hidden', boxShadow:'0 4px 12px rgba(0,0,0,0.08)', transition:'0.3s', aspectRatio:'1', background:'#f3f4f6'}}>
+                <img src={p.storage_path} alt="memory" style={{width:'100%', height:'100%', objectFit:'cover'}} />
+                <button onClick={() => deletePhoto(p.id)} style={{position:'absolute', top:'8px', right:'8px', background:'rgba(0,0,0,0.6)', color:'white', border:'none', borderRadius:'50%', width:'28px', height:'28px', cursor:'pointer', fontWeight:'bold', fontSize:'14px', display:'flex', justifyContent:'center', alignItems:'center'}}>✕</button>
+              </div>
+            ))}
+          </div>
+        )}
       </ViewWrapper>
     )
   }
@@ -169,10 +193,11 @@ function App() {
     return (
       <ViewWrapper title="❓ Past Questions" goHome={() => setCurrentView('home')}>
         <button onClick={fetchRandomQuestion} style={{background:'#f43f5e', color:'white', padding:'0.75rem 2rem', border:'none', borderRadius:'2rem', fontSize:'1rem', fontWeight:'600', cursor:'pointer', marginBottom:'2rem', boxShadow:'0 4px 8px rgba(244, 63, 94, 0.2)'}}>Surprise Me! ✨</button>
-        {currentQuestion ? (
+        {loading ? (
+          <div style={{padding:'2rem', fontSize:'2rem'}}>💭</div>
+        ) : currentQuestion ? (
           <div style={{background:'white', padding:'2rem', borderRadius:'1.5rem', boxShadow:'0 8px 20px rgba(0,0,0,0.05)', maxWidth:'600px', margin:'0 auto'}}>
-            {/* BULLETPROOF QUOTE RENDERING - NO BACKTICKS, NO PLUS SIGNS */}
-            <p style={{fontSize:'1.2rem', fontWeight:'600', color:'#1f2937', marginBottom:'1.5rem', lineHeight:'1.6'}}> {"\""}{currentQuestion.text}{"\""} </p>
+            <p style={{fontSize:'1.2rem', fontWeight:'600', color:'#1f2937', marginBottom:'1.5rem', lineHeight:'1.6'}> {"\""}{currentQuestion.text}{"\""} </p>
             <div style={{display:'flex', gap:'0.5rem', marginBottom:'1.5rem'}}>
               <input type="text" placeholder="Write your memory..." value={answerText} onChange={(e) => setAnswerText(e.target.value)} style={{flex:'1', padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none'}} />
               <button onClick={submitAnswer} style={{background:'#1f2937', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', cursor:'pointer', fontWeight:'600'}}>Reply</button>
@@ -220,25 +245,31 @@ function App() {
     return (
       <ViewWrapper title="🎁 Gifts" goHome={() => setCurrentView('home')}>
         <div style={{display:'flex', flexWrap:'wrap', gap:'0.75rem', justifyContent:'center', marginBottom:'2rem'}}>
-          <select value={giftEmoji} onChange={(e) => setGiftEmoji(e.target.value)} style={{padding:'0.75rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', fontSize:'1.2rem', outline:'none'}}>
-            {GIFT_EMOJIS.map(e => <option key={e} value={e}>{e}</option>)}
-          </select>
-          <input type="text" placeholder="Write a message..." value={giftMsg} onChange={(e) => setGiftMsg(e.target.value)} style={{flex:'1', padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none', minWidth:'200px'}} />
-          <button onClick={sendGift} style={{background:'#f43f5e', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer'}}>Send Gift</button>
+          <input type="text" placeholder="Write a sweet message..." value={giftMsg} onChange={(e) => setGiftMsg(e.target.value)} style={{flex:'1', padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none', minWidth:'200px'}} />
+          <button onClick={sendGift} style={{background:'#f43f5e', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer'}}>Send Gift ✨</button>
         </div>
         <div style={{maxWidth:'600px', margin:'0 auto'}}>
-          {gifts.map(g => (
-            <div key={g.id} style={{display:'flex', justifyContent:'space-between', background:'#fff0f5', padding:'1rem 1.5rem', margin:'0.75rem 0', borderRadius:'1rem', border:'1px solid #fce4ec'}}>
-              <span style={{fontSize:'1.1rem', fontWeight:'500'}}>{g.message}</span>
-              <button onClick={() => deleteGift(g.id)} style={{background:'none', border:'none', color:'#9ca3af', cursor:'pointer', fontSize:'1rem'}} onMouseOver={(e) => e.target.style.color='#ef4444'} onMouseOut={(e) => e.target.style.color='#9ca3af'}>🗑️</button>
-            </div>
-          ))}
+          {gifts.length === 0 ? (
+            <div style={{padding:'2rem', color:'#9ca3af', fontStyle:'italic'}}>Send your first gift to start the love note thread!</div>
+          ) : (
+            gifts.map(g => (
+              <div key={g.id} style={{margin:'0.75rem 0', transition:'0.3s'}}>
+                <div style={{background: randomColor(), padding:'1rem 1.5rem', borderRadius:'1.5rem', borderBottomLeftRadius:'0.5rem', position:'relative', boxShadow:'0 2px 8px rgba(0,0,0,0.05)', textAlign:'left'}}>
+                  <div style={{fontSize:'1.1rem', fontWeight:'500', marginBottom:'0.25rem'}}>{g.message}</div>
+                  <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'0.75rem', color:'#6b7280'}}>
+                    <span>💌 {timeAgo(g.given_at)}</span>
+                    <button onClick={() => deleteGift(g.id)} style={{background:'none', border:'none', fontSize:'0.9rem', cursor:'pointer', opacity:'0.5', transition:'0.2s', padding:'0'}} onMouseOver={(e) => e.target.style.opacity='1'} onMouseOut={(e) => e.target.style.opacity='0.5'}>✕</button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </ViewWrapper>
     )
   }
 
-  // --- HOME DASHBOARD ---
+  // --- HOME ---
   return (
     <div style={{fontFamily:'"Inter", sans-serif', minHeight:'100vh', background:'#fff0f5', padding:'2rem 1rem'}}>
       <div style={{maxWidth:'800px', margin:'0 auto'}}>
@@ -270,8 +301,7 @@ function App() {
   )
 }
 
-// --- REUSABLE COMPONENTS ---
-
+// --- COMPONENTS ---
 const ViewWrapper = ({ title, children, goHome }) => (
   <div style={{fontFamily:'"Inter", sans-serif', minHeight:'100vh', background:'#fff0f5', padding:'2rem 1rem', textAlign:'center'}}>
     <div style={{maxWidth:'800px', margin:'0 auto'}}>
