@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
 import ParticleGift from './ParticleGift'
+import VideoCall from './VideoCall' // Import the new Video Call component
 
+// --- GIFTS CATALOG ---
 const LIVELY_GIFTS = [
   { label: 'Good Morning ☀️', price: 50, category: 'Daily Love' },
   { label: 'Goodnight 🌙', price: 50, category: 'Daily Love' },
@@ -123,6 +125,9 @@ function App() {
   const [savingsAmount, setSavingsAmount] = useState('')
   const [withdrawAmount, setWithdrawAmount] = useState('')
   const [withdrawReason, setWithdrawReason] = useState('')
+
+  // Call State
+  const [callType, setCallType] = useState(null) // 'video', 'voice', or null
 
   // PWA Prompt
   useEffect(() => {
@@ -358,14 +363,6 @@ function App() {
     await supabase.from('gifts').delete().eq('id', id); fetchGifts(); showToast('Gift removed')
   }
 
-  // --- THE TARGET FIX: sendChatMessage WITH DEBUG LOG ---
-  console.log("🚀 sendChatMessage is now DEFINED!");
-  const sendChatMessage = async () => {
-    if (!chatInput.trim() || !userProfile) return
-    await supabase.from('chat_messages').insert({ sender_name: userProfile.name, message: chatInput })
-    setChatInput('')
-  }
-
   const addTimeline = async () => {
     if (!tlTitle || !tlDate) return showToast('Fill in title & date!', 'error')
     await supabase.from('timeline').insert({ title: tlTitle, description: tlDesc || 'A beautiful memory ✨', memory_date: tlDate })
@@ -403,6 +400,7 @@ function App() {
     showToast('💬 Answer marked correct! 50 Shillings credited!')
   }
 
+  // --- EFFECTS ---
   useEffect(() => { if (currentView === 'gallery') fetchPhotos() }, [currentView])
   useEffect(() => { if (currentView === 'plans') fetchPlans() }, [currentView])
   useEffect(() => { if (currentView === 'gifts') { fetchGifts(); fetchTransactions(); } }, [currentView])
@@ -411,7 +409,7 @@ function App() {
   useEffect(() => { if (currentView === 'wallet') fetchTransactions() }, [currentView])
   useEffect(() => { if (currentView === 'savings') fetchSavings() }, [currentView])
 
-  // Chat & Realtime Subscription
+  // Realtime Effects
   useEffect(() => {
     if (currentView === 'chat') {
       fetchChatMessages()
@@ -423,7 +421,6 @@ function App() {
       return () => supabase.removeChannel(channel)
     }
   }, [currentView])
-
   useEffect(() => {
     if (currentView === 'gifts') {
       const gChannel = supabase.channel('gifts')
@@ -436,6 +433,7 @@ function App() {
 
   const startDate = new Date('2017-01-01'); const now = new Date(); const diffMs = now - startDate; const totalDays = Math.floor(diffMs / (1000 * 60 * 60 * 24)); const years = Math.floor(totalDays / 365); const remainingDays = totalDays % 365; const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
 
+  // --- LOGIN ---
   if (!isLoggedIn) {
     return (
       <div style={{display:'flex', justifyContent:'center', alignItems:'center', height:'100vh', background:'linear-gradient(135deg, #fce4ec 0%, #f3e8ff 50%, #e0f2fe 100%)', fontFamily:'Inter, sans-serif'}}>
@@ -464,10 +462,21 @@ function App() {
     )
   }
 
+  // --- OVERLAYS ---
   if (activeParticleGift) {
     return <ParticleGift message={activeParticleGift.message} color={activeParticleGift.color} onClose={() => setActiveParticleGift(null)} />
   }
 
+  if (callType) {
+    return (
+      <VideoCall 
+        audioOnly={callType === 'voice'} 
+        onLeave={() => { setCallType(null); setCurrentView('home'); }} 
+      />
+    )
+  }
+
+  // --- VIEWS ---
   if (currentView === 'gallery') {
     return (
       <ViewWrapper title="📸 Gallery" goBack={goBack}>
@@ -483,8 +492,14 @@ function App() {
             {photos.map(p => {
               const isVideo = p.storage_path.endsWith('.mp4') || p.storage_path.endsWith('.mov')
               return (
-                <div key={p.id} style={{position:'relative', borderRadius:'1rem', overflow:'hidden', boxShadow:'0 4px 12px rgba(0,0,0,0.08)', aspectRatio:'1', background:'#f3f4f6'}}>
-                  {isVideo ? <video src={p.storage_path} controls style={{width:'100%', height:'100%', objectFit:'cover'}} /> : <img src={p.storage_path} alt="memory" style={{width:'100%', height:'100%', objectFit:'cover'}} onError={(e) => { e.target.src = 'https://placehold.co/160x160/fce4ec/f43f5e?text=❤️'; }} />}
+                <div key={p.id} style={{position:'relative', borderRadius:'1rem', overflow:'hidden', boxShadow:'0 4px 12px rgba(0,0,0,0.08)', aspectRatio:'1', background:'#f3f4f6', display:'flex', flexDirection:'column'}}>
+                  <div style={{flex:1}}>
+                    {isVideo ? <video src={p.storage_path} controls style={{width:'100%', height:'100%', objectFit:'cover'}} /> : <img src={p.storage_path} alt="memory" style={{width:'100%', height:'100%', objectFit:'cover'}} onError={(e) => { e.target.src = 'https://placehold.co/160x160/fce4ec/f43f5e?text=❤️'; }} />}
+                  </div>
+                  {/* IMAGE DOWNLOAD BUTTON */}
+                  <a href={p.storage_path} download={`family_memory_${p.id}`} style={{textDecoration:'none'}}>
+                    <div style={{background:'rgba(0,0,0,0.7)', color:'white', padding:'0.5rem', textAlign:'center', fontWeight:'600', fontSize:'0.8rem', cursor:'pointer', borderTop:'1px solid rgba(255,255,255,0.1)'}}>⬇️ Download</div>
+                  </a>
                   <button onClick={() => deletePhoto(p.id)} style={{position:'absolute', top:'8px', right:'8px', background:'rgba(0,0,0,0.6)', color:'white', border:'none', borderRadius:'50%', width:'28px', height:'28px', cursor:'pointer', fontWeight:'bold', fontSize:'14px', display:'flex', justifyContent:'center', alignItems:'center'}}>✕</button>
                 </div>
               )
@@ -886,6 +901,7 @@ function App() {
           <MenuCard icon="📖" title="History Tree" action={() => navigateTo('timeline')} />
           <MenuCard icon="📥" title="Inbox" action={() => navigateTo('questions')} />
           <MenuCard icon="💬" title="Chat" action={() => navigateTo('chat')} />
+          <MenuCard icon="📞" title="Call" action={() => setCallType('video')} />
           <MenuCard icon="📅" title="Plans" action={() => navigateTo('plans')} />
           <MenuCard icon="🎁" title="Gifts" action={() => navigateTo('gifts')} />
           <MenuCard icon="💰" title="Savings" action={() => navigateTo('savings')} />
