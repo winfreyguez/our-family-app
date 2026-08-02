@@ -66,6 +66,9 @@ function App() {
   const [signupPin, setSignupPin] = useState('')
   const [userProfile, setUserProfile] = useState(null)
 
+  // --- PWA INSTALLATION STATE ---
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+
   const [historyStack, setHistoryStack] = useState(['home']);
   const navigateTo = (view) => {
     setHistoryStack(prev => [...prev, view]);
@@ -122,6 +125,31 @@ function App() {
   const [savingsAmount, setSavingsAmount] = useState('')
   const [withdrawAmount, setWithdrawAmount] = useState('')
   const [withdrawReason, setWithdrawReason] = useState('')
+
+  // --- PWA INSTALL LISTENER ---
+  useEffect(() => {
+    const handler = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+        showToast('App installed successfully! 🎉');
+      } else {
+        showToast('Installation cancelled.', 'info');
+      }
+    } else {
+      showToast('Open this on a mobile browser to install!', 'info');
+    }
+  };
 
   const showToast = (msg, type = 'success') => {
     setToast({ message: msg, type })
@@ -441,7 +469,7 @@ function App() {
   // --- VIEWS ---
   if (currentView === 'gallery') {
     return (
-      <ViewWrapper title="📸 Shared Gallery" goBack={goBack}>
+      <ViewWrapper title="📸 Gallery" goBack={goBack}>
         <div style={{marginBottom:'1.5rem', display:'flex', gap:'1rem', justifyContent:'center', flexWrap:'wrap'}}>
           <input type="file" accept="image/*,video/*" capture="environment" onChange={uploadPhoto} disabled={isUploading} style={{display:'none'}} id="upload" />
           <label htmlFor="upload" style={{display:'inline-block', background:'linear-gradient(135deg, #f43f5e, #fb7185)', color:'white', padding:'0.75rem 2rem', borderRadius:'2rem', cursor:'pointer', fontWeight:'600', fontSize:'0.95rem', transition:'0.2s', boxShadow:'0 4px 8px rgba(244, 63, 94, 0.2)'}}>{isUploading ? 'Uploading...' : '📸 Choose Media'}</label>
@@ -555,7 +583,7 @@ function App() {
 
   if (currentView === 'questions') {
     return (
-      <ViewWrapper title="📥 Question Inbox" goBack={goBack}>
+      <ViewWrapper title="📥 Inbox" goBack={goBack}>
         <div style={{display:'flex', flexWrap:'wrap', gap:'0.75rem', justifyContent:'center', marginBottom:'2rem'}}>
           <input type="text" placeholder="Write your own question..." value={newQuestionText} onChange={(e) => setNewQuestionText(e.target.value)} style={{flex:'1', padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none', minWidth:'200px'}} />
           <button onClick={askManualQuestion} style={{background:'#1f2937', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'600', cursor:'pointer'}}>Ask Manual</button>
@@ -607,7 +635,7 @@ function App() {
 
   if (currentView === 'plans') {
     return (
-      <ViewWrapper title="📅 Shared Plans" goBack={goBack}>
+      <ViewWrapper title="📅 Plans" goBack={goBack}>
         <div style={{display:'flex', flexWrap:'wrap', gap:'0.75rem', justifyContent:'center', marginBottom:'2rem'}}>
           <select value={planCategory} onChange={(e) => setPlanCategory(e.target.value)} style={{padding:'0.75rem 1rem', border:'1px solid #e5e7eb', borderRadius:'0.75rem', outline:'none', background:'white'}}>
             <option value="General">General</option>
@@ -652,7 +680,7 @@ function App() {
 
   if (currentView === 'gifts') {
     return (
-      <ViewWrapper title="🎁 Gifts & Wallet" goBack={goBack}>
+      <ViewWrapper title="🎁 Gifts" goBack={goBack}>
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', background:'white', padding:'0.75rem 1.5rem', borderRadius:'1rem', marginBottom:'1.5rem', boxShadow:'0 2px 8px rgba(0,0,0,0.05)', flexWrap:'wrap', gap:'0.5rem'}}>
           <div><span style={{fontWeight:'bold', color:'#f43f5e'}}>💖 {userProfile.name}'s Wallet:</span> <span style={{fontWeight:'700', fontSize:'1.2rem', color:'#1f2937'}}>{userProfile.wallet} Shillings</span></div>
           <div style={{display:'flex', gap:'0.5rem'}}>
@@ -718,7 +746,7 @@ function App() {
 
   if (currentView === 'wallet') {
     return (
-      <ViewWrapper title="💰 Financial Ledger" goBack={goBack}>
+      <ViewWrapper title="💰 Ledger" goBack={goBack}>
         <div style={{background:'white', borderRadius:'1rem', padding:'1.5rem', boxShadow:'0 4px 12px rgba(0,0,0,0.05)', maxWidth:'600px', margin:'0 auto'}}>
           <div style={{display:'flex', justifyContent:'space-between', marginBottom:'1rem', borderBottom:'1px solid #e5e7eb', paddingBottom:'0.5rem'}}>
             <b>Description</b>
@@ -804,13 +832,27 @@ function App() {
     )
   }
 
-  // --- FAMILY HUB (HOME) ---
+  // --- HOME DASHBOARD ---
   return (
-    <div style={{fontFamily:'"Inter", sans-serif', minHeight:'100vh', background:'linear-gradient(135deg, #fff0f5 0%, #f3e8ff 50%, #ffebf0 100%)', padding:'2rem 1rem'}}>
+    <div style={{fontFamily:'"Inter", sans-serif", minHeight:'100vh', background:'linear-gradient(135deg, #fff0f5 0%, #f3e8ff 50%, #ffebf0 100%)', padding:'2rem 1rem'}}>
+      {/* NATIVE MOBILE HEADER - PERFECT ALIGNMENT */}
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'1rem 1rem 0.5rem 1rem', maxWidth:'800px', margin:'0 auto'}}>
+        <div style={{fontWeight:'700', fontSize:'1.2rem', color:'#f43f5e', letterSpacing:'-0.5px'}}>Winfrey &amp; George</div>
+        {/* THE DOWNLOAD BUTTON YOU REQUESTED */}
+        <button 
+          onClick={handleInstallClick} 
+          style={{background:'transparent', border:'none', cursor:'pointer', display:'flex', alignItems:'center', gap:'0.3rem', fontWeight:'600', color:'#1f2937', padding:'0.3rem 0.8rem', borderRadius:'2rem', border:'1px solid #e5e7eb'}}
+          onMouseOver={(e) => e.target.style.borderColor='#f43f5e'}
+          onMouseOut={(e) => e.target.style.borderColor='#e5e7eb'}
+        >
+          <span style={{fontSize:'1.2rem'}}>📲</span> Install
+        </button>
+      </div>
+
       <div style={{maxWidth:'800px', margin:'0 auto'}}>
         <div style={{background:'rgba(255, 255, 255, 0.7)', backdropFilter:'blur(16px)', borderRadius:'2rem', padding:'3rem 2rem', boxShadow:'0 20px 40px rgba(244, 63, 94, 0.15), inset 0 0 0 1px rgba(255,255,255,0.6)', textAlign:'center', marginBottom:'2rem', border:'1px solid rgba(255,255,255,0.5)'}}>
           <div style={{fontSize:'4rem', marginBottom:'0.5rem', animation:'heartBeat 1.5s infinite'}}>💕</div>
-          <h1 style={{background:'linear-gradient(135deg, #f43f5e, #8b5cf6)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', fontSize:'2.5rem', fontWeight:'700', marginBottom:'0.5rem'}}>Winfrey & George</h1>
+          <h1 style={{background:'linear-gradient(135deg, #f43f5e, #8b5cf6)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', fontSize:'2.5rem', fontWeight:'700', marginBottom:'0.5rem'}}>Winfrey &amp; George</h1>
           <div style={{fontSize:'1.1rem', color:'#6b7280', background:'#fce4ec', padding:'0.5rem 1.5rem', borderRadius:'2rem', display:'inline-block'}}>
             <span style={{fontWeight:'600', color:'#f43f5e'}}>{years}</span> Years, <span style={{fontWeight:'600', color:'#f43f5e'}}>{remainingDays}</span> Days, <span style={{fontWeight:'600', color:'#f43f5e'}}>{hours}</span> Hours 💫
           </div>
@@ -838,32 +880,42 @@ function App() {
   )
 }
 
-// --- FIXED VIEW WRAPPER - PARSER WILL NO LONGER CRASH ---
+// --- PERFECTED NATIVE HEADER (Back button aligned top-left, title centered) ---
 const ViewWrapper = ({ title, children, goBack }) => (
-  <div style={{fontFamily:'"Inter", sans-serif', minHeight:'100vh', background:'linear-gradient(135deg, #fff0f5 0%, #f3e8ff 50%, #ffebf0 100%)', padding:'2rem 1rem', textAlign:'center', position:'relative'}}>
-    <div style={{maxWidth:'800px', margin:'0 auto'}}>
-      <div style={{display:'flex', justifyContent:'flex-start', marginBottom:'1rem', paddingLeft:'0.5rem'}}>
+  <div style={{fontFamily:'"Inter", sans-serif", minHeight:'100vh', background:'linear-gradient(135deg, #fff0f5 0%, #f3e8ff 50%, #ffebf0 100%)', padding:'2rem 1rem', display:'flex', flexDirection:'column'}}>
+    <div style={{maxWidth:'800px', margin:'0 auto', width:'100%'}}>
+      
+      {/* Native iOS/Android style header */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '0.5rem 0 1.5rem 0',
+        position: 'relative'
+      }}>
         <button
           onClick={goBack}
           style={{
             background: 'none',
             border: 'none',
-            fontSize: '1.2rem',
+            fontSize: '1.4rem',
             cursor: 'pointer',
             color: '#f43f5e',
-            fontWeight: '600',
             display: 'flex',
             alignItems: 'center',
-            gap: '0.3rem',
-            transition: '0.2s'
+            gap: '0.2rem',
+            padding: '0.5rem',
+            position: 'absolute',
+            left: '0',
+            top: '0',
+            fontWeight: '500'
           }}
-          onMouseOver={(e) => e.target.style.transform = 'translateX(-4px)'}
-          onMouseOut={(e) => e.target.style.transform = 'translateX(0)'}
         >
-          <span>&larr;</span> Back
+          <span>&larr;</span>
         </button>
+        <div style={{fontWeight:'700', fontSize:'1.4rem', color:'#1f2937'}}>{title}</div>
       </div>
-      <h2 style={{background:'linear-gradient(135deg, #1f2937, #4b5563)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', fontSize:'2rem', fontWeight:'700', marginBottom:'2rem', display:'inline-block'}}>{title}</h2>
+
       {children}
     </div>
   </div>
