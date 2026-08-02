@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-export default function VideoCall({ audioOnly = false, onLeave }) {
+export default function VideoCall({ audioOnly = false, roomName = "WinfreyGeorgeFamilyHub", onLeave }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [api, setApi] = useState(null);
@@ -34,12 +34,12 @@ export default function VideoCall({ audioOnly = false, onLeave }) {
 
     const domain = 'meet.jit.si';
     const options = {
-      roomName: 'WinfreyGeorgeFamilyHub',
+      roomName: roomName, // Uses the dynamically shared room name
       width: '100%',
       height: '100%',
       parentNode: document.getElementById('jitsi-container'),
       configOverwrite: {
-        startWithVideoMuted: audioOnly, // If audioOnly, video starts muted
+        startWithVideoMuted: audioOnly,
         startWithAudioMuted: false,
       },
       interfaceConfigOverwrite: {
@@ -62,17 +62,7 @@ export default function VideoCall({ audioOnly = false, onLeave }) {
   };
 
   return (
-    <div style={{ 
-      display: 'flex', 
-      flexDirection: 'column', 
-      height: '100vh', 
-      width: '100vw', 
-      position: 'fixed', 
-      top: 0, 
-      left: 0, 
-      zIndex: 9999, 
-      background: '#1f2937' 
-    }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', position: 'fixed', top: 0, left: 0, zIndex: 9999, background: '#1f2937' }}>
       {isLoading && (
         <div style={{ color: 'white', textAlign: 'center', marginTop: '4rem' }}>
           <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>📞</div>
@@ -83,12 +73,7 @@ export default function VideoCall({ audioOnly = false, onLeave }) {
         <div style={{ color: '#ef4444', textAlign: 'center', marginTop: '4rem', padding: '1rem' }}>
           <h2>Oops!</h2>
           <p>{error}</p>
-          <button 
-            onClick={onLeave} 
-            style={{ background: '#f43f5e', color: 'white', border: 'none', padding: '0.5rem 1.5rem', borderRadius: '2rem', marginTop: '1rem', fontWeight: '600', cursor: 'pointer' }}
-          >
-            Go Back
-          </button>
+          <button onClick={onLeave} style={{ background: '#f43f5e', color: 'white', border: 'none', padding: '0.5rem 1.5rem', borderRadius: '2rem', marginTop: '1rem', fontWeight: '600', cursor: 'pointer' }}>Go Back</button>
         </div>
       )}
       <div id="jitsi-container" style={{ width: '100%', height: '100%', display: isLoading || error ? 'none' : 'block' }}></div>
