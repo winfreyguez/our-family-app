@@ -3,29 +3,19 @@ import { supabase } from './supabaseClient'
 import ParticleGift from './ParticleGift'
 import VideoCall from './VideoCall'
 
-// --- GLOBAL SAFETY CHECK (PREVENTS BLANK WHITE PAGE) ---
+// --- GLOBAL SAFETY CHECK ---
 const url = import.meta.env.VITE_SUPABASE_URL;
 const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
 if (!url || !key) {
-  // If keys are missing, we show this error instead of a white screen
   document.body.innerHTML = `
     <div style="font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background: #fce4ec; padding: 20px; text-align: center;">
       <div style="background: white; padding: 40px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); max-width: 500px;">
         <h1 style="color: #f43f5e;">🔑 Keys Missing!</h1>
-        <p style="color: #4b5563; line-height: 1.6; font-size: 1.1rem;">
-          Your Render Environment Variables are not set.
-          <br/><br/>
-          Please go to <b>Render</b> > <b>Environment</b> and add:
-          <br/><br/>
-          <code style="background: #f3f4f6; padding: 8px 12px; border-radius: 8px; display: block; margin: 10px 0; font-weight: bold;">VITE_SUPABASE_URL</code>
-          <code style="background: #f3f4f6; padding: 8px 12px; border-radius: 8px; display: block; margin: 10px 0; font-weight: bold;">VITE_SUPABASE_ANON_KEY</code>
-          <br/>
-          Then click <b>"Clear build cache & deploy"</b>.
-        </p>
+        <p style="color: #4b5563; line-height: 1.6; font-size: 1.1rem;">Please add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to Render Environment variables.</p>
       </div>
     </div>
   `;
-  throw new Error("Config Missing"); // Stops React from running
+  throw new Error("Config Missing");
 }
 
 // --- GIFTS CATALOG ---
@@ -92,6 +82,9 @@ function App() {
   const [signupName, setSignupName] = useState('')
   const [signupPin, setSignupPin] = useState('')
   const [userProfile, setUserProfile] = useState(null)
+
+  // --- DELETE ACCOUNT STATE ---
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
 
   const [unreadCounts, setUnreadCounts] = useState({
     gallery: 0, timeline: 0, chat: 0, questions: 0, plans: 0, gifts: 0, savings: 0
@@ -243,6 +236,45 @@ function App() {
     setUserProfile(data); setIsLoggedIn(true); setSignupName(''); setSignupPin('')
     requestNotificationPermission()
     showToast(`Account created! Welcome, ${data.name}! 💕`)
+  }
+
+  // --- PERMANENT ACCOUNT DELETION LOGIC ---
+  const handleDeleteAccount = async () => {
+    if (!userProfile) return;
+    const id = userProfile.id;
+    const name = userProfile.name;
+
+    try {
+      showToast('Deleting account...', 'info');
+      // 1. Delete Chat Messages (linked by sender_name)
+      await supabase.from('chat_messages').delete().eq('sender_name', name);
+      // 2. Delete Gifts (linked by sender_id or receiver_id)
+      await supabase.from('gifts').delete().or(`sender_id.eq.${id},receiver_id.eq.${id}`);
+      // 3. Delete Savings
+      await supabase.from('savings').delete().eq('profile_id', id);
+      // 4. Delete Transactions
+      await supabase.from('transactions').delete().eq('profile_id', id);
+      // 5. Delete Answers
+      await supabase.from('answers').delete().eq('profile_id', id);
+      // 6. Delete Questions
+      await supabase.from('questions').delete().eq('profile_id', id);
+      // 7. Delete Family Modes
+      await supabase.from('family_modes').delete().or(`requester_id.eq.${id},accepter_id.eq.${id}`);
+      // 8. Delete Calls
+      await supabase.from('calls').delete().or(`caller_id.eq.${id},receiver_id.eq.${id}`);
+      // 9. Delete the Profile itself
+      await supabase.from('profiles').delete().eq('id', id);
+
+      // 10. Clean up local state
+      setIsLoggedIn(false);
+      setUserProfile(null);
+      setOtherProfile(null);
+      setShowDeleteModal(false);
+      localStorage.removeItem(`last_read_`); // Remove unread timestamps
+      showToast('Account permanently deleted. 💔', 'error');
+    } catch (err) {
+      showToast('Error deleting account.', 'error');
+    }
   }
 
   const calculateUnread = (data, moduleKey) => {
@@ -1225,7 +1257,7 @@ function App() {
     )
   }
 
-  // --- HOME DASHBOARD ---
+  // --- HOME DASHBOARD WITH DELETE ACCOUNT BUTTON ---
   return (
     <div style={{fontFamily:'Inter, sans-serif', minHeight:'100vh', background: currentStyle.bg, padding:'2rem 1rem', transition:'background 1s ease-in-out, color 0.5s ease', animation: currentStyle.bgAnim}}>
       
@@ -1334,7 +1366,6 @@ function App() {
           )}
         </div>
 
-        {/* NOTIFICATION REQUEST BUTTON */}
         <div style={{display:'flex', justifyContent:'center', marginBottom:'1.5rem'}}>
           <button onClick={requestNotificationPermission} style={{background:'#1f2937', color:'white', padding:'0.5rem 1rem', borderRadius:'2rem', border:'none', fontWeight:'600', cursor:'pointer', fontSize:'0.9rem'}}>
             🔔 Enable Notifications
@@ -1371,6 +1402,30 @@ function App() {
         </div>
         
         <button onClick={() => setIsLoggedIn(false)} style={{display:'block', margin:'3rem auto 0', background:'linear-gradient(135deg, #1f2937, #4b5563)', color:'white', padding:'0.75rem 2.5rem', border:'none', borderRadius:'2rem', fontSize:'0.95rem', cursor:'pointer', fontWeight:'500', boxShadow:'0 4px 12px rgba(0,0,0,0.1)'}}>Log Out</button>
+
+        {/* DELETE ACCOUNT BUTTON */}
+        <div style={{marginTop:'1rem'}}>
+          <button onClick={() => setShowDeleteModal(true)} style={{background:'transparent', color:'#ef4444', border:'none', textDecoration:'underline', fontSize:'0.9rem', cursor:'pointer', fontWeight:'500'}}>
+            Delete Account Permanently
+          </button>
+        </div>
+
+        {/* DELETE CONFIRMATION MODAL */}
+        {showDeleteModal && (
+          <div style={{position:'fixed', inset:'0', background:'rgba(0,0,0,0.7)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:'9999', padding:'1rem'}}>
+            <div style={{background:'white', padding:'2rem', borderRadius:'1.5rem', maxWidth:'380px', width:'100%', textAlign:'center'}}>
+              <div style={{fontSize:'3rem', marginBottom:'0.5rem'}}>⚠️</div>
+              <h2 style={{color:'#ef4444', marginBottom:'1rem'}}>Delete Account?</h2>
+              <p style={{color:'#4b5563', fontSize:'0.95rem', marginBottom:'1.5rem', lineHeight:'1.6'}}>
+                This action is <b>permanent</b>. All your data, messages, photos, and history will be erased instantly.
+              </p>
+              <div style={{display:'flex', gap:'1rem', justifyContent:'center'}}>
+                <button onClick={handleDeleteAccount} style={{background:'#ef4444', color:'white', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'bold', cursor:'pointer'}}>Delete Forever</button>
+                <button onClick={() => setShowDeleteModal(false)} style={{background:'#e5e7eb', padding:'0.75rem 1.5rem', border:'none', borderRadius:'0.75rem', fontWeight:'bold', cursor:'pointer'}}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
       {toast && (
         <div style={{position:'fixed', bottom:'2rem', left:'50%', transform:'translateX(-50%)', background: toast.type === 'error' ? '#ef4444' : '#22c55e', color:'white', padding:'1rem 2rem', borderRadius:'2rem', boxShadow:'0 10px 25px rgba(0,0,0,0.15)', fontWeight:'500', zIndex:1000, animation:'fadeIn 0.3s'}}>{toast.message}</div>
