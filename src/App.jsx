@@ -75,14 +75,19 @@ function App() {
   const [otherProfile, setOtherProfile] = useState(null)
 
   // --- FAMILY MODE STATE ---
-  const [currentMode, setCurrentMode] = useState('normal') // normal, romantic, sexual
-  const [activeModeRequest, setActiveModeRequest] = useState(null) // For pending approvals
+  const [currentMode, setCurrentMode] = useState('normal') 
+  const [activeModeRequest, setActiveModeRequest] = useState(null) 
   const [modeStartTime, setModeStartTime] = useState(null)
+
+  // --- CALL STATE ---
+  const [callType, setCallType] = useState(null)
+  const [callRoom, setCallRoom] = useState(null)
+  const [incomingCall, setIncomingCall] = useState(null) // Stores the incoming call object
 
   const [deferredPrompt, setDeferredPrompt] = useState(null)
   const [showInstallModal, setShowInstallModal] = useState(false)
 
-  // --- NATIVE NAVIGATION (Hardware Back Button) ---
+  // --- NATIVE NAVIGATION ---
   const [historyStack, setHistoryStack] = useState(['home'])
   const navigateTo = (view) => {
     setHistoryStack(prev => [...prev, view])
@@ -148,8 +153,6 @@ function App() {
   const [withdrawAmount, setWithdrawAmount] = useState('')
   const [withdrawReason, setWithdrawReason] = useState('')
 
-  const [callType, setCallType] = useState(null)
-
   // --- NATIVE NOTIFICATIONS ---
   const requestNotificationPermission = () => {
     if (!("Notification" in window)) return
@@ -157,7 +160,6 @@ function App() {
       Notification.requestPermission()
     }
   }
-
   const sendNativeNotification = (title, body) => {
     if (!("Notification" in window) || Notification.permission !== "granted") return
     try { new Notification(title, { body }) } catch (e) {}
@@ -448,6 +450,52 @@ function App() {
     showToast('💬 Answer marked correct! 50 Shillings credited!')
   }
 
+  // --- CALL LOGIC ---
+  const initiateCall = async (type) => {
+    if (!userProfile || !otherProfile) return showToast('Could not find the other user.', 'error');
+    const roomName = `call_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    const { error } = await supabase.from('calls').insert({
+      caller_id: userProfile.id,
+      receiver_id: otherProfile.id,
+      type: type,
+      status: 'ringing',
+      room_name: roomName
+    });
+    if (error) {
+      showToast('Failed to initiate call.', 'error');
+      return;
+    }
+    setCallType(type);
+    setCallRoom(roomName);
+    showToast(`Calling ${otherProfile.name}... 📞`);
+  };
+
+  const acceptCall = async (call) => {
+    // 1. Update status to connected
+    await supabase.from('calls').update({ status: 'connected' }).eq('id', call.id);
+    // 2. Close the incoming popup
+    setIncomingCall(null);
+    // 3. Open the video/audio call
+    setCallType(call.type);
+    setCallRoom(call.room_name);
+  };
+
+  const rejectCall = async (call) => {
+    await supabase.from('calls').update({ status: 'ended' }).eq('id', call.id);
+    setIncomingCall(null);
+    showToast('Call declined.');
+  };
+
+  const endCall = async () => {
+    if (callRoom) {
+      // Mark as ended in DB so the other person's app knows
+      await supabase.from('calls').update({ status: 'ended' }).eq('room_name', callRoom);
+    }
+    setCallType(null);
+    setCallRoom(null);
+    navigateTo('home');
+  };
+
   const sendChatMessage = async () => {
     if (!chatInput.trim() || !userProfile) return
     await supabase.from('chat_messages').insert({ sender_name: userProfile.name, message: chatInput })
@@ -475,7 +523,6 @@ function App() {
   const requestMode = async (mode) => {
     if (!userProfile || !otherProfile) return showToast('Other profile not found', 'error')
     if (currentMode === mode) return showToast('Already in this mode!', 'info')
-    
     await supabase.from('family_modes').insert({
       requester_id: userProfile.id,
       accepter_id: otherProfile.id,
@@ -502,9 +549,9 @@ function App() {
     let cost = 0
 
     if (currentMode === 'romantic') {
-      cost = minutes * 4 // Romantic: 4 shillings per minute
+      cost = minutes * 4
     } else if (currentMode === 'sexual') {
-      cost = minutes * 8 // Sexual: 8 shillings per minute
+      cost = minutes * 8
     }
 
     let msg = `Ended ${currentMode} mode.`
@@ -535,11 +582,63 @@ function App() {
     showToast(msg, 'success')
   }
 
-  // --- GLOBAL NOTIFICATIONS & MODE LISTENER ---
+  // --- ANIMATED MODE COLORS ---
+  const modeColors = {
+    normal: { 
+      bg: 'linear-gradient(135deg, #fff0f5, #f3e8ff, #ffebf0)', 
+      bgAnim: 'gradientShiftNormal 8s ease infinite',
+      accent: '#f43f5e', text: '#1f2937', card: 'rgba(255, 255, 255, 0.7)',
+      chatBg: 'linear-gradient(180deg, #fff0f5, #f3e8ff)',
+      chatMe: 'linear-gradient(135deg, #f43f5e, #fb7185)',
+      chatPartner: 'linear-gradient(135deg, #8b5cf6, #a78bfa)'
+    },
+    romantic: { 
+      bg: 'linear-gradient(135deg, #ffe4e6, #ffc0cb, #db2777, #fda4af)', 
+      bgAnim: 'gradientShiftRomantic 12s ease infinite',
+      accent: '#be123c', text: '#4c0519', card: 'rgba(255, 255, 255, 0.5)',
+      chatBg: 'linear-gradient(180deg, #ffe4e6, #fbcfe8)',
+      chatMe: 'linear-gradient(135deg, #be123c, #f472b6)',
+      chatPartner: 'linear-gradient(135deg, #f472b6, #fda4af)'
+    },
+    sexual: { 
+      bg: 'linear-gradient(135deg, #1f0933, #4c1d95, #6b21a8, #2e1065)', 
+      bgAnim: 'gradientShiftSexual 10s ease infinite',
+      accent: '#a855f7', text: '#e9d5ff', card: 'rgba(0,0,0,0.3)',
+      chatBg: 'linear-gradient(180deg, #1f0933, #4c1d95)',
+      chatMe: 'linear-gradient(135deg, #a855f7, #c084fc)',
+      chatPartner: 'linear-gradient(135deg, #4c1d95, #7e22ce)'
+    }
+  }
+  const currentStyle = modeColors[currentMode] || modeColors.normal
+
+  // --- GLOBAL REALTIME (INSTANT SYNC & INCOMING CALL LISTENER) ---
   useEffect(() => {
     if (!userProfile) return;
 
     const tables = ['photos', 'plans', 'gifts', 'timeline', 'questions', 'answers', 'savings', 'chat_messages', 'family_modes'];
+    // Separate array for calls to handle special logic
+    const callChannel = supabase.channel('global_calls')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calls' }, payload => {
+        // If the call is for ME, and it's ringing
+        if (payload.new.receiver_id === userProfile.id && payload.new.status === 'ringing') {
+          setIncomingCall(payload.new);
+          sendNativeNotification('📞 Incoming Call!', `${otherProfile?.name || 'Someone'} is calling you.`);
+        }
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'calls' }, payload => {
+        // If I am the caller, and the call connects, the popup on my side should close (already handled by state), 
+        // but we need to ensure the receiver is connected.
+        if (payload.new.status === 'ended') {
+          // If the other person ended the call, hang up locally
+          if (callType) {
+            showToast('Call ended by the other party.', 'info');
+            setCallType(null);
+            setCallRoom(null);
+          }
+        }
+      })
+      .subscribe();
+
     const channels = tables.map(table => {
       return supabase.channel(`global_${table}`)
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table }, payload => {
@@ -559,7 +658,20 @@ function App() {
           }
           
           const moduleKey = table === 'chat_messages' ? 'chat' : table === 'photos' ? 'gallery' : table === 'family_modes' ? null : table;
-          if (moduleKey) setUnreadCounts(prev => ({ ...prev, [moduleKey]: (prev[moduleKey] || 0) + 1 }));
+          if (moduleKey) {
+            setUnreadCounts(prev => ({ ...prev, [moduleKey]: (prev[moduleKey] || 0) + 1 }));
+            // Force state update immediately so UI reflects change
+            if (table === 'chat_messages') setMessages(prev => [...prev, payload.new]);
+            else if (table === 'photos') setPhotos(prev => [payload.new, ...prev]);
+            else if (table === 'plans') setPlans(prev => [...prev, payload.new]);
+            else if (table === 'gifts') setGifts(prev => [payload.new, ...prev]);
+            else if (table === 'timeline') setTimelines(prev => [payload.new, ...prev]);
+            else if (table === 'questions') setQuestions(prev => [payload.new, ...prev]);
+            else if (table === 'savings') { 
+              if (payload.new.status === 'pending') setPendingSavings(prev => [...prev, payload.new]);
+              else setSavings(prev => [...prev, payload.new]);
+            }
+          }
         })
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'family_modes' }, payload => {
           if (payload.new.status === 'active') {
@@ -572,7 +684,10 @@ function App() {
         .subscribe()
     });
 
-    return () => { channels.forEach(channel => supabase.removeChannel(channel)); };
+    return () => { 
+      channels.forEach(channel => supabase.removeChannel(channel));
+      supabase.removeChannel(callChannel);
+    };
   }, [userProfile, otherProfile]);
 
   // --- EFFECTS ---
@@ -627,47 +742,7 @@ function App() {
       .eq('is_read', false)
   }
 
-  // --- REALTIME ---
-  useEffect(() => {
-    if (currentView === 'chat') {
-      fetchChatMessages()
-      const channel = supabase.channel('chat_messages')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, payload => setMessages(prev => [...prev, payload.new]))
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chat_messages' }, payload => setMessages(prev => prev.map(m => m.id === payload.new.id ? payload.new : m)))
-        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'chat_messages' }, payload => setMessages(prev => prev.filter(m => m.id !== payload.old.id)))
-        .subscribe()
-      setTimeout(() => markMessagesAsRead(), 500)
-      return () => supabase.removeChannel(channel)
-    }
-  }, [currentView])
-
   const startDate = new Date('2017-01-01'); const now = new Date(); const diffMs = now - startDate; const totalDays = Math.floor(diffMs / (1000 * 60 * 60 * 24)); const years = Math.floor(totalDays / 365); const remainingDays = totalDays % 365; const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
-
-  // --- DYNAMIC MODE COLORS FOR CHAT AND APP ---
-  const modeColors = {
-    normal: { 
-      bg: 'linear-gradient(135deg, #fff0f5, #f3e8ff, #ffebf0)', 
-      accent: '#f43f5e', text: '#1f2937', card: 'rgba(255, 255, 255, 0.7)',
-      chatBg: 'linear-gradient(180deg, #fff0f5, #f3e8ff)',
-      chatMe: 'linear-gradient(135deg, #f43f5e, #fb7185)',
-      chatPartner: 'linear-gradient(135deg, #8b5cf6, #a78bfa)'
-    },
-    romantic: { 
-      bg: 'linear-gradient(135deg, #ffe4e6, #ffc0cb, #db2777)', 
-      accent: '#be123c', text: '#4c0519', card: 'rgba(255, 255, 255, 0.5)',
-      chatBg: 'linear-gradient(180deg, #ffe4e6, #fbcfe8)',
-      chatMe: 'linear-gradient(135deg, #be123c, #f472b6)',
-      chatPartner: 'linear-gradient(135deg, #f472b6, #fda4af)'
-    },
-    sexual: { 
-      bg: 'linear-gradient(135deg, #1f0933, #4c1d95, #6b21a8)', 
-      accent: '#a855f7', text: '#e9d5ff', card: 'rgba(0,0,0,0.3)',
-      chatBg: 'linear-gradient(180deg, #1f0933, #4c1d95)',
-      chatMe: 'linear-gradient(135deg, #a855f7, #c084fc)',
-      chatPartner: 'linear-gradient(135deg, #4c1d95, #7e22ce)'
-    }
-  }
-  const currentStyle = modeColors[currentMode] || modeColors.normal
 
   // --- LOGIN ---
   if (!isLoggedIn) {
@@ -703,11 +778,12 @@ function App() {
     return <ParticleGift message={activeParticleGift.message} color={activeParticleGift.color} onClose={() => setActiveParticleGift(null)} />
   }
 
-  if (callType) {
+  if (callType && callRoom) {
     return (
       <VideoCall 
         audioOnly={callType === 'voice'} 
-        onLeave={() => { setCallType(null); setCurrentView('home'); }} 
+        roomName={callRoom} // Pass the shared room name!
+        onLeave={endCall} 
       />
     )
   }
@@ -781,7 +857,7 @@ function App() {
 
   if (currentView === 'chat') {
     return (
-      <div style={{fontFamily:'Inter, sans-serif', height:'100vh', display:'flex', flexDirection:'column', overflow:'hidden', background: currentStyle.chatBg, transition:'background 0.8s ease-in-out'}}>
+      <div style={{fontFamily:'Inter, sans-serif', height:'100vh', display:'flex', flexDirection:'column', overflow:'hidden', background: currentStyle.chatBg, transition:'background 1s ease-in-out'}}>
         <div style={{background:'linear-gradient(135deg, #f43f5e, #a78bfa)', color:'white', padding:'1rem 1.5rem', display:'flex', justifyContent:'space-between', alignItems:'center', boxShadow:'0 2px 4px rgba(0,0,0,0.1)'}}>
           <button onClick={goBack} style={{background:'none', border:'none', color:'white', fontSize:'1.2rem', cursor:'pointer'}}>←</button>
           <div style={{fontWeight:'700', fontSize:'1.1rem', textAlign:'center'}}>
@@ -1110,22 +1186,42 @@ function App() {
     )
   }
 
-  // --- HOME DASHBOARD WITH MODES, CALLS, AND DYNAMIC STYLES ---
+  // --- HOME DASHBOARD WITH MODE ANIMATIONS ---
   return (
-    <div style={{fontFamily:'Inter, sans-serif', minHeight:'100vh', background: currentStyle.bg, padding:'2rem 1rem', transition:'background 1s ease-in-out, color 0.5s ease'}}>
+    <div style={{fontFamily:'Inter, sans-serif', minHeight:'100vh', background: currentStyle.bg, padding:'2rem 1rem', transition:'background 1s ease-in-out, color 0.5s ease', animation: currentStyle.bgAnim}}>
       
-      {/* MODE ANIMATIONS */}
+      {/* ANIMATION STYLES */}
       <style>
-        {currentMode === 'romantic' && `
-          @keyframes floatHearts { 0% { opacity:0; transform: translateY(0) scale(0.5); } 50% { opacity:0.8; } 100% { opacity:0; transform: translateY(-100px) scale(1.2); } }
-          body { overflow-x: hidden; }
-        `}
-        {currentMode === 'sexual' && `
-          @keyframes pulseGlow { 0% { box-shadow: 0 0 5px #a855f7, 0 0 10px #a855f7; } 50% { box-shadow: 0 0 20px #a855f7, 0 0 40px #7e22ce; } 100% { box-shadow: 0 0 5px #a855f7, 0 0 10px #a855f7; } }
+        {`
+          @keyframes gradientShiftNormal {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+          }
+          @keyframes gradientShiftRomantic {
+            0% { background-position: 0% 0%; }
+            50% { background-position: 100% 100%; }
+            100% { background-position: 0% 0%; }
+          }
+          @keyframes gradientShiftSexual {
+            0% { background-position: 0% 0%; }
+            50% { background-position: 100% 100%; }
+            100% { background-position: 0% 0%; }
+          }
+          @keyframes floatHearts { 
+            0% { opacity:0; transform: translateY(0) scale(0.5); } 
+            50% { opacity:0.8; } 
+            100% { opacity:0; transform: translateY(-100px) scale(1.2); } 
+          }
+          @keyframes pulseGlow { 
+            0% { box-shadow: 0 0 5px #a855f7, 0 0 10px #a855f7; } 
+            50% { box-shadow: 0 0 20px #a855f7, 0 0 40px #7e22ce; } 
+            100% { box-shadow: 0 0 5px #a855f7, 0 0 10px #a855f7; } 
+          }
         `}
       </style>
 
-      {/* ROMANTIC MODE HEARTS */}
+      {/* ROMANTIC MODE FLOATING HEARTS */}
       {currentMode === 'romantic' && (
         <div style={{position:'fixed', top:'10%', left:'10%', pointerEvents:'none', zIndex:0}}>
           <div style={{fontSize:'2rem', animation:'floatHearts 4s infinite'}}>❤️</div>
@@ -1148,6 +1244,24 @@ function App() {
           <span style={{fontSize:'1.2rem'}}>📲</span> Install
         </button>
       </div>
+
+      {/* INCOMING CALL POPUP OVERLAY */}
+      {incomingCall && (
+        <div style={{position:'fixed', inset:'0', background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:'9999', padding:'1rem'}}>
+          <div style={{background:'white', padding:'2.5rem', borderRadius:'2rem', maxWidth:'400px', width:'100%', textAlign:'center', animation:'fadeIn 0.5s'}}>
+            <div style={{fontSize:'4rem', marginBottom:'0.5rem', animation:'heartBeat 1s infinite'}}>📞</div>
+            <h2 style={{color:'#f43f5e', marginBottom:'0.5rem', fontWeight:'700'}}>Incoming Call</h2>
+            <p style={{color:'#4b5563', fontWeight:'600', fontSize:'1.2rem', marginBottom:'1.5rem'}}>
+              {otherProfile?.name} is calling you!<br/>
+              <span style={{fontSize:'0.9rem', fontWeight:'400', color:'#6b7280'}}>({incomingCall.type === 'video' ? '📹 Video Call' : '🎙️ Voice Call'})</span>
+            </p>
+            <div style={{display:'flex', gap:'1rem', justifyContent:'center'}}>
+              <button onClick={() => acceptCall(incomingCall)} style={{background:'#10b981', color:'white', padding:'1rem 2rem', borderRadius:'2rem', border:'none', fontWeight:'bold', fontSize:'1.1rem', cursor:'pointer', boxShadow:'0 4px 12px rgba(16,185,129,0.4)'}}>Accept</button>
+              <button onClick={() => rejectCall(incomingCall)} style={{background:'#ef4444', color:'white', padding:'1rem 2rem', borderRadius:'2rem', border:'none', fontWeight:'bold', fontSize:'1.1rem', cursor:'pointer', boxShadow:'0 4px 12px rgba(239,68,68,0.4)'}}>Reject</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showInstallModal && (
         <div style={{position:'fixed', inset:'0', background:'rgba(0,0,0,0.7)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:'9999', padding:'1rem'}}>
@@ -1210,8 +1324,8 @@ function App() {
           <MenuCard icon="📖" title="History Tree" action={() => navigateTo('timeline')} badge={unreadCounts.timeline} accent={currentStyle.accent} />
           <MenuCard icon="📥" title="Inbox" action={() => navigateTo('questions')} badge={unreadCounts.questions} accent={currentStyle.accent} />
           <MenuCard icon="💬" title="Chat" action={() => navigateTo('chat')} badge={unreadCounts.chat} accent={currentStyle.accent} />
-          <MenuCard icon="📹" title="Video Call" action={() => setCallType('video')} accent={currentStyle.accent} />
-          <MenuCard icon="🎙️" title="Voice Call" action={() => setCallType('voice')} accent={currentStyle.accent} />
+          <MenuCard icon="📹" title="Video Call" action={() => initiateCall('video')} accent={currentStyle.accent} />
+          <MenuCard icon="🎙️" title="Voice Call" action={() => initiateCall('voice')} accent={currentStyle.accent} />
           <MenuCard icon="📅" title="Plans" action={() => navigateTo('plans')} badge={unreadCounts.plans} accent={currentStyle.accent} />
           <MenuCard icon="🎁" title="Gifts" action={() => navigateTo('gifts')} badge={unreadCounts.gifts} accent={currentStyle.accent} />
           <MenuCard icon="💰" title="Savings" action={() => navigateTo('savings')} badge={unreadCounts.savings} accent={currentStyle.accent} />
