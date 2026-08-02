@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
 import ParticleGift from './ParticleGift'
 
-// --- LIVELY GIFTS CATALOG ---
 const LIVELY_GIFTS = [
   { label: 'Good Morning ☀️', price: 50, category: 'Daily Love' },
   { label: 'Goodnight 🌙', price: 50, category: 'Daily Love' },
@@ -66,24 +65,23 @@ function App() {
   const [signupPin, setSignupPin] = useState('')
   const [userProfile, setUserProfile] = useState(null)
 
-  // --- PWA INSTALLATION STATE ---
-  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [deferredPrompt, setDeferredPrompt] = useState(null)
 
-  const [historyStack, setHistoryStack] = useState(['home']);
+  const [historyStack, setHistoryStack] = useState(['home'])
   const navigateTo = (view) => {
-    setHistoryStack(prev => [...prev, view]);
-    setCurrentView(view);
-  };
+    setHistoryStack(prev => [...prev, view])
+    setCurrentView(view)
+  }
   const goBack = () => {
     if (historyStack.length > 1) {
-      const newStack = [...historyStack];
-      newStack.pop();
-      setHistoryStack(newStack);
-      setCurrentView(newStack[newStack.length - 1]);
+      const newStack = [...historyStack]
+      newStack.pop()
+      setHistoryStack(newStack)
+      setCurrentView(newStack[newStack.length - 1])
     } else {
-      setCurrentView('home');
+      setCurrentView('home')
     }
-  };
+  }
 
   const [currentView, setCurrentView] = useState('home')
   const [toast, setToast] = useState(null)
@@ -114,7 +112,6 @@ function App() {
   const [replyText, setReplyText] = useState('')
   const [editingQId, setEditingQId] = useState(null)
   const [editQText, setEditQText] = useState('')
-  
   const [chatInput, setChatInput] = useState('')
   const [editingMsgId, setEditingMsgId] = useState(null)
   const [editingMsgText, setEditingMsgText] = useState('')
@@ -126,30 +123,29 @@ function App() {
   const [withdrawAmount, setWithdrawAmount] = useState('')
   const [withdrawReason, setWithdrawReason] = useState('')
 
-  // --- PWA INSTALL LISTENER ---
   useEffect(() => {
     const handler = (e) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    };
-    window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
-  }, []);
+      e.preventDefault()
+      setDeferredPrompt(e)
+    }
+    window.addEventListener('beforeinstallprompt', handler)
+    return () => window.removeEventListener('beforeinstallprompt', handler)
+  }, [])
 
   const handleInstallClick = async () => {
     if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
+      deferredPrompt.prompt()
+      const { outcome } = await deferredPrompt.userChoice
       if (outcome === 'accepted') {
-        setDeferredPrompt(null);
-        showToast('App installed successfully! 🎉');
+        setDeferredPrompt(null)
+        showToast('App installed successfully! 🎉')
       } else {
-        showToast('Installation cancelled.', 'info');
+        showToast('Installation cancelled.', 'info')
       }
     } else {
-      showToast('Open this on a mobile browser to install!', 'info');
+      showToast('Open this on a mobile browser to install!', 'info')
     }
-  };
+  }
 
   const showToast = (msg, type = 'success') => {
     setToast({ message: msg, type })
@@ -319,43 +315,43 @@ function App() {
   }
 
   const sendGift = async (livelyGift = null) => {
-    if (!userProfile) return showToast('Please log in', 'error');
-    const now = new Date();
-    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const { count } = await supabase.from('gifts').select('id', { count: 'exact', head: true }).eq('sender_id', userProfile.id).gte('given_at', firstDayOfMonth.toISOString());
-    if (count >= 3) return showToast('❌ Max 3 gifts per month!', 'error');
+    if (!userProfile) return showToast('Please log in', 'error')
+    const now = new Date()
+    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+    const { count } = await supabase.from('gifts').select('id', { count: 'exact', head: true }).eq('sender_id', userProfile.id).gte('given_at', firstDayOfMonth.toISOString())
+    if (count >= 3) return showToast('❌ Max 3 gifts per month!', 'error')
 
-    let finalMessage = giftMsg; let finalPrice = 0; let finalCategory = 'Custom'; let animationColor = '#f43f5e'; let animationMessage = '🎁 You sent a gift!';
+    let finalMessage = giftMsg; let finalPrice = 0; let finalCategory = 'Custom'; let animationColor = '#f43f5e'; let animationMessage = '🎁 You sent a gift!'
     if (livelyGift) {
-      finalMessage = livelyGift.label; finalPrice = livelyGift.price; finalCategory = livelyGift.category;
-      if (finalCategory === 'Daily Love') animationColor = '#fbbf24'; else if (finalCategory === 'Physical Touch') animationColor = '#f43f5e'; else if (finalCategory === 'Adventure') animationColor = '#06b6d4'; else if (finalCategory === 'Emotions') animationColor = '#8b5cf6'; else if (finalCategory === 'Food & Drink') animationColor = '#f59e0b'; else if (finalCategory === 'Luxury') animationColor = '#ec4899'; else animationColor = '#3b82f6';
-      animationMessage = `💝 ${finalMessage}`;
+      finalMessage = livelyGift.label; finalPrice = livelyGift.price; finalCategory = livelyGift.category
+      if (finalCategory === 'Daily Love') animationColor = '#fbbf24'; else if (finalCategory === 'Physical Touch') animationColor = '#f43f5e'; else if (finalCategory === 'Adventure') animationColor = '#06b6d4'; else if (finalCategory === 'Emotions') animationColor = '#8b5cf6'; else if (finalCategory === 'Food & Drink') animationColor = '#f59e0b'; else if (finalCategory === 'Luxury') animationColor = '#ec4899'; else animationColor = '#3b82f6'
+      animationMessage = `💝 ${finalMessage}`
     } else {
-      if (!giftMsg) return showToast('Write a message!', 'error'); finalPrice = 50; finalCategory = 'Custom';
+      if (!giftMsg) return showToast('Write a message!', 'error'); finalPrice = 50; finalCategory = 'Custom'
       if (giftType !== 'Custom Message') {
-        const giftEmojis = { 'Jewelry': '💍', 'Subscription Box': '📦', 'Luxury Weighted Blanket': '🛏️', 'Spa Package': '🧖', 'Digital Gift Card': '💳' };
-        finalMessage = `${giftEmojis[giftType] || '🎁'} ${giftType}: ${giftMsg}`; finalPrice = 200;
+        const giftEmojis = { 'Jewelry': '💍', 'Subscription Box': '📦', 'Luxury Weighted Blanket': '🛏️', 'Spa Package': '🧖', 'Digital Gift Card': '💳' }
+        finalMessage = `${giftEmojis[giftType] || '🎁'} ${giftType}: ${giftMsg}`; finalPrice = 200
       }
-      animationMessage = `🎁 ${finalMessage}`;
+      animationMessage = `🎁 ${finalMessage}`
     }
-    if (userProfile.wallet < finalPrice) return showToast(`Not enough Love Points! Need ${finalPrice - userProfile.wallet} more 💖`, 'error');
-    const newWallet = userProfile.wallet - finalPrice;
-    await supabase.from('profiles').update({ wallet: newWallet }).eq('id', userProfile.id);
-    setUserProfile(prev => ({ ...prev, wallet: newWallet }));
-    await supabase.from('transactions').insert({ profile_id: userProfile.id, amount: -finalPrice, type: 'Sent', description: finalMessage });
-    const { error } = await supabase.from('gifts').insert({ message: finalMessage, price: finalPrice, category: finalCategory, is_opened: false, sender_id: userProfile.id });
-    if (!error) { setGiftMsg(''); await fetchGifts(); if (finalPrice >= 150) setActiveParticleGift({ message: animationMessage, color: animationColor }); showToast(`🎁 ${finalMessage} sent! (${finalPrice} Shillings)`); } else showToast('Failed to send', 'error');
+    if (userProfile.wallet < finalPrice) return showToast(`Not enough Love Points! Need ${finalPrice - userProfile.wallet} more 💖`, 'error')
+    const newWallet = userProfile.wallet - finalPrice
+    await supabase.from('profiles').update({ wallet: newWallet }).eq('id', userProfile.id)
+    setUserProfile(prev => ({ ...prev, wallet: newWallet }))
+    await supabase.from('transactions').insert({ profile_id: userProfile.id, amount: -finalPrice, type: 'Sent', description: finalMessage })
+    const { error } = await supabase.from('gifts').insert({ message: finalMessage, price: finalPrice, category: finalCategory, is_opened: false, sender_id: userProfile.id })
+    if (!error) { setGiftMsg(''); await fetchGifts(); if (finalPrice >= 150) setActiveParticleGift({ message: animationMessage, color: animationColor }); showToast(`🎁 ${finalMessage} sent! (${finalPrice} Shillings)`) } else showToast('Failed to send', 'error')
   }
   const openGift = async (gift) => {
     if (openingGift || gift.is_opened || !userProfile) return; setOpeningGift(gift.id)
-    let animColor = '#f43f5e';
-    if (gift.category === 'Daily Love') animColor = '#fbbf24'; else if (gift.category === 'Physical Touch') animColor = '#f43f5e'; else if (gift.category === 'Adventure') animColor = '#06b6d4'; else if (gift.category === 'Emotions') animColor = '#8b5cf6'; else if (gift.category === 'Food & Drink') animColor = '#f59e0b'; else if (gift.category === 'Luxury') animColor = '#ec4899';
+    let animColor = '#f43f5e'
+    if (gift.category === 'Daily Love') animColor = '#fbbf24'; else if (gift.category === 'Physical Touch') animColor = '#f43f5e'; else if (gift.category === 'Adventure') animColor = '#06b6d4'; else if (gift.category === 'Emotions') animColor = '#8b5cf6'; else if (gift.category === 'Food & Drink') animColor = '#f59e0b'; else if (gift.category === 'Luxury') animColor = '#ec4899'
     setActiveParticleGift({ message: `💝 ${gift.message}`, color: animColor })
-    const claimerId = userProfile.id; const newWallet = userProfile.wallet + gift.price;
-    await supabase.from('profiles').update({ wallet: newWallet }).eq('id', claimerId);
-    setUserProfile(prev => ({ ...prev, wallet: newWallet }));
-    await supabase.from('transactions').insert({ profile_id: claimerId, amount: gift.price, type: 'Received', description: `Received ${gift.message}` });
-    await supabase.from('gifts').update({ is_opened: true, opened_at: new Date(), receiver_id: claimerId }).eq('id', gift.id);
+    const claimerId = userProfile.id; const newWallet = userProfile.wallet + gift.price
+    await supabase.from('profiles').update({ wallet: newWallet }).eq('id', claimerId)
+    setUserProfile(prev => ({ ...prev, wallet: newWallet }))
+    await supabase.from('transactions').insert({ profile_id: claimerId, amount: gift.price, type: 'Received', description: `Received ${gift.message}` })
+    await supabase.from('gifts').update({ is_opened: true, opened_at: new Date(), receiver_id: claimerId }).eq('id', gift.id)
     await fetchGifts(); setOpeningGift(null)
   }
   const deleteGift = async (id) => {
@@ -387,19 +383,18 @@ function App() {
     setReplyText(''); setReplyingTo(null); fetchQuestions(); showToast('💬 Reply sent!')
   }
   const markCorrect = async (answerId, profileId) => {
-    const { data: existing } = await supabase.from('answers').select('is_correct').eq('id', answerId).single();
-    if (existing?.is_correct) return showToast('Already marked correct!', 'info');
-    await supabase.from('answers').update({ is_correct: true }).eq('id', answerId);
-    const { data: answerer } = await supabase.from('profiles').select('wallet').eq('id', profileId).single();
-    const newWallet = answerer.wallet + 50;
-    await supabase.from('profiles').update({ wallet: newWallet }).eq('id', profileId);
-    await supabase.from('transactions').insert({ profile_id: profileId, amount: 50, type: 'Correct Answer', description: 'Answer marked as correct!' });
-    fetchQuestions();
-    if (profileId === userProfile.id) setUserProfile(prev => ({ ...prev, wallet: newWallet }));
-    showToast('💬 Answer marked correct! 50 Shillings credited!');
+    const { data: existing } = await supabase.from('answers').select('is_correct').eq('id', answerId).single()
+    if (existing?.is_correct) return showToast('Already marked correct!', 'info')
+    await supabase.from('answers').update({ is_correct: true }).eq('id', answerId)
+    const { data: answerer } = await supabase.from('profiles').select('wallet').eq('id', profileId).single()
+    const newWallet = answerer.wallet + 50
+    await supabase.from('profiles').update({ wallet: newWallet }).eq('id', profileId)
+    await supabase.from('transactions').insert({ profile_id: profileId, amount: 50, type: 'Correct Answer', description: 'Answer marked as correct!' })
+    fetchQuestions()
+    if (profileId === userProfile.id) setUserProfile(prev => ({ ...prev, wallet: newWallet }))
+    showToast('💬 Answer marked correct! 50 Shillings credited!')
   }
 
-  // --- USE EFFECTS ---
   useEffect(() => { if (currentView === 'gallery') fetchPhotos() }, [currentView])
   useEffect(() => { if (currentView === 'plans') fetchPlans() }, [currentView])
   useEffect(() => { if (currentView === 'gifts') { fetchGifts(); fetchTransactions(); } }, [currentView])
@@ -408,7 +403,6 @@ function App() {
   useEffect(() => { if (currentView === 'wallet') fetchTransactions() }, [currentView])
   useEffect(() => { if (currentView === 'savings') fetchSavings() }, [currentView])
 
-  // Chat & Realtime
   useEffect(() => {
     if (currentView === 'chat') {
       fetchChatMessages()
@@ -430,12 +424,11 @@ function App() {
     }
   }, [currentView])
 
-  const startDate = new Date('2017-01-01'); const now = new Date(); const diffMs = now - startDate; const totalDays = Math.floor(diffMs / (1000 * 60 * 60 * 24)); const years = Math.floor(totalDays / 365); const remainingDays = totalDays % 365; const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const startDate = new Date('2017-01-01'); const now = new Date(); const diffMs = now - startDate; const totalDays = Math.floor(diffMs / (1000 * 60 * 60 * 24)); const years = Math.floor(totalDays / 365); const remainingDays = totalDays % 365; const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
 
-  // --- LOGIN / SIGNUP ---
   if (!isLoggedIn) {
     return (
-      <div style={{display:'flex', justifyContent:'center', alignItems:'center', height:'100vh', background:'linear-gradient(135deg, #fce4ec 0%, #f3e8ff 50%, #e0f2fe 100%)', fontFamily:'"Inter", sans-serif'}}>
+      <div style={{display:'flex', justifyContent:'center', alignItems:'center', height:'100vh', background:'linear-gradient(135deg, #fce4ec 0%, #f3e8ff 50%, #e0f2fe 100%)', fontFamily:'Inter, sans-serif'}}>
         <div style={{background:'rgba(255, 255, 255, 0.85)', backdropFilter:'blur(16px)', padding:'2.5rem 2rem', borderRadius:'2rem', boxShadow:'0 20px 40px rgba(244, 63, 94, 0.25)', textAlign:'center', maxWidth:'400px', width:'100%', border:'1px solid rgba(255,255,255,0.5)'}}>
           <div style={{fontSize:'3.5rem', marginBottom:'0.5rem', animation:'float 3s ease-in-out infinite'}}>💕</div>
           <h1 style={{background:'linear-gradient(135deg, #f43f5e, #8b5cf6)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', fontWeight:'700', marginBottom:'1rem'}}>Winfrey & George</h1>
@@ -461,12 +454,10 @@ function App() {
     )
   }
 
-  // --- GIFT OVERLAY ---
   if (activeParticleGift) {
     return <ParticleGift message={activeParticleGift.message} color={activeParticleGift.color} onClose={() => setActiveParticleGift(null)} />
   }
 
-  // --- VIEWS ---
   if (currentView === 'gallery') {
     return (
       <ViewWrapper title="📸 Gallery" goBack={goBack}>
@@ -480,7 +471,7 @@ function App() {
         ) : (
           <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:'1.5rem'}}>
             {photos.map(p => {
-              const isVideo = p.storage_path.endsWith('.mp4') || p.storage_path.endsWith('.mov');
+              const isVideo = p.storage_path.endsWith('.mp4') || p.storage_path.endsWith('.mov')
               return (
                 <div key={p.id} style={{position:'relative', borderRadius:'1rem', overflow:'hidden', boxShadow:'0 4px 12px rgba(0,0,0,0.08)', aspectRatio:'1', background:'#f3f4f6'}}>
                   {isVideo ? <video src={p.storage_path} controls style={{width:'100%', height:'100%', objectFit:'cover'}} /> : <img src={p.storage_path} alt="memory" style={{width:'100%', height:'100%', objectFit:'cover'}} onError={(e) => { e.target.src = 'https://placehold.co/160x160/fce4ec/f43f5e?text=❤️'; }} />}
@@ -530,7 +521,7 @@ function App() {
 
   if (currentView === 'chat') {
     return (
-      <div style={{fontFamily:'"Inter", sans-serif', height:'100vh', display:'flex', flexDirection:'column', overflow:'hidden', background:'linear-gradient(180deg, #fff0f5, #f3e8ff)'}}>
+      <div style={{fontFamily:'Inter, sans-serif', height:'100vh', display:'flex', flexDirection:'column', overflow:'hidden', background:'linear-gradient(180deg, #fff0f5, #f3e8ff)'}}>
         <div style={{background:'linear-gradient(135deg, #f43f5e, #a78bfa)', color:'white', padding:'1rem 1.5rem', display:'flex', justifyContent:'space-between', alignItems:'center', boxShadow:'0 2px 4px rgba(0,0,0,0.1)'}}>
           <button onClick={goBack} style={{background:'none', border:'none', color:'white', fontSize:'1.2rem', cursor:'pointer'}}>←</button>
           <div style={{fontWeight:'700', fontSize:'1.1rem', textAlign:'center'}}>💞 Winfrey & George</div>
@@ -538,7 +529,7 @@ function App() {
         </div>
         <div style={{flex:1, overflowY:'auto', padding:'1rem 1.5rem', display:'flex', flexDirection:'column', gap:'0.5rem'}}>
           {messages.map((msg) => {
-            const isMe = msg.sender_name === userProfile.name;
+            const isMe = msg.sender_name === userProfile.name
             return (
               <div key={msg.id} style={{display:'flex', flexDirection:'column', alignItems: isMe ? 'flex-end' : 'flex-start', animation:'popIn 0.3s ease-out', position:'relative', maxWidth:'85%'}}>
                 <div style={{background: isMe ? 'linear-gradient(135deg, #f43f5e, #fb7185)' : 'linear-gradient(135deg, #8b5cf6, #a78bfa)', color:'white', padding:'0.75rem 1rem', borderRadius: isMe ? '1rem 1rem 0 1rem' : '1rem 1rem 1rem 0', boxShadow:'0 2px 8px rgba(244, 63, 94, 0.2)', minWidth:'50px'}}>
@@ -652,9 +643,9 @@ function App() {
         <div style={{maxWidth:'600px', margin:'0 auto'}}>
           {plans.map(p => {
             const isOverdue = new Date(p.due_date) < new Date() && p.status !== 'done'
-            const categoryColors = { 'Date Night': '#fce7f3', 'Family Trip': '#e0f2fe', 'Home Project': '#fef3c7', 'Health & Wellness': '#d1fae5', 'General': '#f3f4f6' };
-            const displayPrice = p.target_price && p.target_price > 0 ? `${p.target_price} KSh` : null;
-            const isFullyApproved = p.approved_by_1 && p.approved_by_2;
+            const categoryColors = { 'Date Night': '#fce7f3', 'Family Trip': '#e0f2fe', 'Home Project': '#fef3c7', 'Health & Wellness': '#d1fae5', 'General': '#f3f4f6' }
+            const displayPrice = p.target_price && p.target_price > 0 ? `${p.target_price} KSh` : null
+            const isFullyApproved = p.approved_by_1 && p.approved_by_2
             return (
               <div key={p.id} style={{display:'flex', alignItems:'center', justifyContent:'space-between', background: categoryColors[p.category] || '#f3f4f6', padding:'0.75rem 1.5rem', margin:'0.75rem 0', borderRadius:'1rem', boxShadow:'0 2px 8px rgba(0,0,0,0.05)', borderLeft: isOverdue ? '6px solid #ef4444' : isFullyApproved ? '6px solid #22c55e' : '6px solid #f43f5e', opacity: p.status === 'done' ? '0.7' : '1'}}>
                 <span onClick={() => togglePlan(p.id, p.status)} style={{cursor:'pointer', flex:'1', textDecoration: p.status === 'done' ? 'line-through' : 'none', color: isOverdue && p.status !== 'done' ? '#ef4444' : '#1f2937'}}>
@@ -708,7 +699,7 @@ function App() {
           <h4 style={{textAlign:'center', color:'#6b7280', marginBottom:'1rem'}}>Received Gifts (Click to Open)</h4>
           {gifts.length === 0 ? <div style={{padding:'2rem', color:'#9ca3af', fontStyle:'italic', textAlign:'center'}}>Send your first gift!</div> : (
             gifts.map(g => {
-              const isReceiver = g.receiver_id === userProfile.id || (!g.is_opened && g.sender_id !== userProfile.id);
+              const isReceiver = g.receiver_id === userProfile.id || (!g.is_opened && g.sender_id !== userProfile.id)
               return (
               <div key={g.id} onClick={() => isReceiver && !g.is_opened && openGift(g)} style={{cursor: isReceiver && !g.is_opened ? 'pointer' : 'default', margin:'0.75rem 0', transition:'0.3s', animation: 'giftFadeIn 0.5s ease-out'}}>
                 <div style={{background: g.is_opened ? '#d1fae5' : randomColor(), padding:'1rem 1.5rem', borderRadius:'1.5rem', borderBottomLeftRadius:'0.5rem', position:'relative', boxShadow:'0 2px 8px rgba(0,0,0,0.05)', textAlign:'left', border: g.is_opened ? '2px solid #10b981' : 'none'}}>
@@ -771,8 +762,8 @@ function App() {
   }
 
   if (currentView === 'savings') {
-    const totalSavings = savings.reduce((acc, s) => s.type === 'deposit' ? acc + s.amount : acc - s.amount, 0);
-    const mySavings = savings.filter(s => s.profile_id === userProfile.id).reduce((acc, s) => s.type === 'deposit' ? acc + s.amount : acc - s.amount, 0);
+    const totalSavings = savings.reduce((acc, s) => s.type === 'deposit' ? acc + s.amount : acc - s.amount, 0)
+    const mySavings = savings.filter(s => s.profile_id === userProfile.id).reduce((acc, s) => s.type === 'deposit' ? acc + s.amount : acc - s.amount, 0)
     
     return (
       <ViewWrapper title="💰 Savings" goBack={goBack}>
@@ -832,13 +823,14 @@ function App() {
     )
   }
 
-  // --- HOME DASHBOARD ---
+  // --- HOME DASHBOARD (Cleaned up to avoid parser syntax errors) ---
   return (
-    <div style={{fontFamily:'"Inter", sans-serif", minHeight:'100vh', background:'linear-gradient(135deg, #fff0f5 0%, #f3e8ff 50%, #ffebf0 100%)', padding:'2rem 1rem'}}>
-      {/* NATIVE MOBILE HEADER - PERFECT ALIGNMENT */}
+    <div style={{fontFamily:'Inter, sans-serif', minHeight:'100vh', background:'linear-gradient(135deg, #fff0f5, #f3e8ff, #ffebf0)', padding:'2rem 1rem'}}>
+      
+      {/* NATIVE TOP HEADER */}
       <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'1rem 1rem 0.5rem 1rem', maxWidth:'800px', margin:'0 auto'}}>
-        <div style={{fontWeight:'700', fontSize:'1.2rem', color:'#f43f5e', letterSpacing:'-0.5px'}}>Winfrey &amp; George</div>
-        {/* THE DOWNLOAD BUTTON YOU REQUESTED */}
+        <div style={{fontWeight:'700', fontSize:'1.2rem', color:'#f43f5e', letterSpacing:'-0.5px'}}>Winfrey & George</div>
+        {/* INSTALL BUTTON */}
         <button 
           onClick={handleInstallClick} 
           style={{background:'transparent', border:'none', cursor:'pointer', display:'flex', alignItems:'center', gap:'0.3rem', fontWeight:'600', color:'#1f2937', padding:'0.3rem 0.8rem', borderRadius:'2rem', border:'1px solid #e5e7eb'}}
@@ -852,7 +844,7 @@ function App() {
       <div style={{maxWidth:'800px', margin:'0 auto'}}>
         <div style={{background:'rgba(255, 255, 255, 0.7)', backdropFilter:'blur(16px)', borderRadius:'2rem', padding:'3rem 2rem', boxShadow:'0 20px 40px rgba(244, 63, 94, 0.15), inset 0 0 0 1px rgba(255,255,255,0.6)', textAlign:'center', marginBottom:'2rem', border:'1px solid rgba(255,255,255,0.5)'}}>
           <div style={{fontSize:'4rem', marginBottom:'0.5rem', animation:'heartBeat 1.5s infinite'}}>💕</div>
-          <h1 style={{background:'linear-gradient(135deg, #f43f5e, #8b5cf6)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', fontSize:'2.5rem', fontWeight:'700', marginBottom:'0.5rem'}}>Winfrey &amp; George</h1>
+          <h1 style={{background:'linear-gradient(135deg, #f43f5e, #8b5cf6)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', fontSize:'2.5rem', fontWeight:'700', marginBottom:'0.5rem'}}>Winfrey & George</h1>
           <div style={{fontSize:'1.1rem', color:'#6b7280', background:'#fce4ec', padding:'0.5rem 1.5rem', borderRadius:'2rem', display:'inline-block'}}>
             <span style={{fontWeight:'600', color:'#f43f5e'}}>{years}</span> Years, <span style={{fontWeight:'600', color:'#f43f5e'}}>{remainingDays}</span> Days, <span style={{fontWeight:'600', color:'#f43f5e'}}>{hours}</span> Hours 💫
           </div>
@@ -880,42 +872,16 @@ function App() {
   )
 }
 
-// --- PERFECTED NATIVE HEADER (Back button aligned top-left, title centered) ---
+// --- NATIVE HEADER (Top-Left Back Button, Centered Title) ---
 const ViewWrapper = ({ title, children, goBack }) => (
-  <div style={{fontFamily:'"Inter", sans-serif", minHeight:'100vh', background:'linear-gradient(135deg, #fff0f5 0%, #f3e8ff 50%, #ffebf0 100%)', padding:'2rem 1rem', display:'flex', flexDirection:'column'}}>
+  <div style={{fontFamily:'Inter, sans-serif', minHeight:'100vh', background:'linear-gradient(135deg, #fff0f5, #f3e8ff, #ffebf0)', padding:'2rem 1rem', display:'flex', flexDirection:'column'}}>
     <div style={{maxWidth:'800px', margin:'0 auto', width:'100%'}}>
-      
-      {/* Native iOS/Android style header */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '0.5rem 0 1.5rem 0',
-        position: 'relative'
-      }}>
-        <button
-          onClick={goBack}
-          style={{
-            background: 'none',
-            border: 'none',
-            fontSize: '1.4rem',
-            cursor: 'pointer',
-            color: '#f43f5e',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.2rem',
-            padding: '0.5rem',
-            position: 'absolute',
-            left: '0',
-            top: '0',
-            fontWeight: '500'
-          }}
-        >
+      <div style={{display:'flex', alignItems:'center', justifyContent:'center', padding:'0.5rem 0 1.5rem 0', position:'relative'}}>
+        <button onClick={goBack} style={{background:'none', border:'none', fontSize:'1.4rem', cursor:'pointer', color:'#f43f5e', display:'flex', alignItems:'center', gap:'0.2rem', padding:'0.5rem', position:'absolute', left:'0', top:'0', fontWeight:'500'}}>
           <span>&larr;</span>
         </button>
         <div style={{fontWeight:'700', fontSize:'1.4rem', color:'#1f2937'}}>{title}</div>
       </div>
-
       {children}
     </div>
   </div>
